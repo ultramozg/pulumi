@@ -16,31 +16,33 @@ import (
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
 		// Read back the default VPC and public subnets, which we will use.
-		t := true
-		vpc, err := ec2.LookupVpc(ctx, &ec2.LookupVpcArgs{Default: &t})
-		if err != nil {
-			return err
-		}
-		subnet, err := ec2.GetSubnetIds(ctx, &ec2.GetSubnetIdsArgs{VpcId: vpc.Id})
-		if err != nil {
-			return err
-		}
-		eksRole, err := iam.NewRole(ctx, "eks-iam-eksRole", &iam.RoleArgs{
-			AssumeRolePolicy: pulumi.String(`{
-		    "Version": "2008-10-17",
-		    "Statement": [{
-		        "Sid": "",
-		        "Effect": "Allow",
-		        "Principal": {
-		            "Service": "eks.amazonaws.com"
-		        },
-		        "Action": "sts:AssumeRole"
-		    }]
-		}`),
-		})
-		if err != nil {
-			return err
-		}
+		/*
+			t := true
+			vpc, err := ec2.LookupVpc(ctx, &ec2.LookupVpcArgs{Default: &t})
+			if err != nil {
+				return err
+			}
+			subnet, err := ec2.GetSubnetIds(ctx, &ec2.GetSubnetIdsArgs{VpcId: vpc.Id})
+			if err != nil {
+				return err
+			}
+			eksRole, err := iam.NewRole(ctx, "eks-iam-eksRole", &iam.RoleArgs{
+				AssumeRolePolicy: pulumi.String(`{
+			    "Version": "2008-10-17",
+			    "Statement": [{
+			        "Sid": "",
+			        "Effect": "Allow",
+			        "Principal": {
+			            "Service": "eks.amazonaws.com"
+			        },
+			        "Action": "sts:AssumeRole"
+			    }]
+			}`),
+			})
+			if err != nil {
+				return err
+			}
+		*/
 		eksPolicies := []string{
 			"arn:aws:iam::aws:policy/AmazonEKSServicePolicy",
 			"arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
