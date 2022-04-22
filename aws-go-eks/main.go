@@ -26,8 +26,10 @@ func main() {
 			if err != nil {
 				return err
 			}
-			eksRole, err := iam.NewRole(ctx, "eks-iam-eksRole", &iam.RoleArgs{
-				AssumeRolePolicy: pulumi.String(`{
+		*/
+
+		eksRole, err := iam.NewRole(ctx, "eks-iam-eksRole", &iam.RoleArgs{
+			AssumeRolePolicy: pulumi.String(`{
 			    "Version": "2008-10-17",
 			    "Statement": [{
 			        "Sid": "",
@@ -38,11 +40,10 @@ func main() {
 			        "Action": "sts:AssumeRole"
 			    }]
 			}`),
-			})
-			if err != nil {
-				return err
-			}
-		*/
+		})
+		if err != nil {
+			return err
+		}
 		eksPolicies := []string{
 			"arn:aws:iam::aws:policy/AmazonEKSServicePolicy",
 			"arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
