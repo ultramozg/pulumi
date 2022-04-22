@@ -27,6 +27,10 @@ func main() {
 				return err
 			}
 		*/
+		opt, err := network.createVpc(ctx)
+		if err != nil {
+			return err
+		}
 
 		eksRole, err := iam.NewRole(ctx, "eks-iam-eksRole", &iam.RoleArgs{
 			AssumeRolePolicy: pulumi.String(`{
@@ -90,7 +94,7 @@ func main() {
 		}
 		// Create a Security Group that we can use to actually connect to our cluster
 		clusterSg, err := ec2.NewSecurityGroup(ctx, "cluster-sg", &ec2.SecurityGroupArgs{
-			VpcId: pulumi.String(vpc.Id),
+			VpcId: pulumi.String(opt.vpc.Id),
 			Egress: ec2.SecurityGroupEgressArray{
 				ec2.SecurityGroupEgressArgs{
 					Protocol:   pulumi.String("-1"),
@@ -121,7 +125,7 @@ func main() {
 				SecurityGroupIds: pulumi.StringArray{
 					clusterSg.ID().ToStringOutput(),
 				},
-				SubnetIds: toPulumiStringArray(subnet.Ids),
+				SubnetIds: toPulumiStringArray(opt.subnet.Ids),
 			},
 		})
 		if err != nil {
@@ -132,7 +136,7 @@ func main() {
 			ClusterName:   eksCluster.Name,
 			NodeGroupName: pulumi.String("demo-eks-nodegroup-2"),
 			NodeRoleArn:   pulumi.StringInput(nodeGroupRole.Arn),
-			SubnetIds:     toPulumiStringArray(subnet.Ids),
+			SubnetIds:     toPulumiStringArray(opt.subnet.Ids),
 			ScalingConfig: &eks.NodeGroupScalingConfigArgs{
 				DesiredSize: pulumi.Int(2),
 				MaxSize:     pulumi.Int(2),
@@ -223,6 +227,10 @@ func main() {
 
 		return nil
 	})
+}
+
+func createVpc(ctx *pulumi.Context) {
+	panic("unimplemented")
 }
 
 //Create the KubeConfig Structure as per https://docs.aws.amazon.com/eks/latest/userguide/create-kubeconfig.html
