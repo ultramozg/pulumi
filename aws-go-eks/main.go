@@ -55,7 +55,7 @@ func main() {
 		privSubnet1, err := ec2.NewSubnet(ctx, prefix+"-priv-subnet-1", &ec2.SubnetArgs{
 			VpcId:            vpc.ID(),
 			CidrBlock:        pulumi.String("10.0.1.0/24"),
-			AvailabilityZone: pulumi.String("us-east-2a"),
+			AvailabilityZone: pulumi.String("eu-west-1a"),
 			Tags:             pulumi.ToStringMap(resourceTags),
 		})
 		if err != nil {
@@ -65,7 +65,7 @@ func main() {
 		privSubnet2, err := ec2.NewSubnet(ctx, prefix+"-priv-subnet-2", &ec2.SubnetArgs{
 			VpcId:            vpc.ID(),
 			CidrBlock:        pulumi.String("10.0.2.0/24"),
-			AvailabilityZone: pulumi.String("eu-west-1"),
+			AvailabilityZone: pulumi.String("eu-west-1b"),
 			Tags:             pulumi.ToStringMap(resourceTags),
 		})
 		if err != nil {
@@ -75,7 +75,7 @@ func main() {
 		privSubnet3, err := ec2.NewSubnet(ctx, prefix+"-priv-subnet-3", &ec2.SubnetArgs{
 			VpcId:            vpc.ID(),
 			CidrBlock:        pulumi.String("10.0.3.0/24"),
-			AvailabilityZone: pulumi.String("us-east-2c"),
+			AvailabilityZone: pulumi.String("eu-west-1c"),
 			Tags:             pulumi.ToStringMap(resourceTags),
 		})
 		if err != nil {
@@ -87,7 +87,7 @@ func main() {
 		pubSubnet1, err := ec2.NewSubnet(ctx, prefix+"-pub-subnet-1", &ec2.SubnetArgs{
 			VpcId:            vpc.ID(),
 			CidrBlock:        pulumi.String("10.0.4.0/24"),
-			AvailabilityZone: pulumi.String("us-east-2a"),
+			AvailabilityZone: pulumi.String("eu-west-1a"),
 			Tags:             pulumi.ToStringMap(resourceTags),
 		})
 		if err != nil {
@@ -97,7 +97,7 @@ func main() {
 		pubSubnet2, err := ec2.NewSubnet(ctx, prefix+"-pub-subnet-2", &ec2.SubnetArgs{
 			VpcId:            vpc.ID(),
 			CidrBlock:        pulumi.String("10.0.5.0/24"),
-			AvailabilityZone: pulumi.String("us-east-2b"),
+			AvailabilityZone: pulumi.String("eu-west-1b"),
 			Tags:             pulumi.ToStringMap(resourceTags),
 		})
 		if err != nil {
@@ -107,7 +107,7 @@ func main() {
 		pubSubnet3, err := ec2.NewSubnet(ctx, prefix+"-pub-subnet-3", &ec2.SubnetArgs{
 			VpcId:            vpc.ID(),
 			CidrBlock:        pulumi.String("10.0.6.0/24"),
-			AvailabilityZone: pulumi.String("us-east-2c"),
+			AvailabilityZone: pulumi.String("eu-west-1c"),
 			Tags:             pulumi.ToStringMap(resourceTags),
 		})
 		if err != nil {
