@@ -359,13 +359,15 @@ func main() {
 			ClusterName:   eksCluster.Name,
 			NodeGroupName: pulumi.String("demo-eks-nodegroup-2"),
 			NodeRoleArn:   pulumi.StringInput(nodeGroupRole.Arn),
+			InstanceTypes: pulumi.StringArray{pulumi.String("t3.medium")},
+			CapacityType:  pulumi.String("SPOT"),
 			SubnetIds: pulumi.StringArray{
 				privSubnet1.ID(),
 				privSubnet2.ID(),
 				privSubnet3.ID(),
 			},
 			ScalingConfig: &eks.NodeGroupScalingConfigArgs{
-				DesiredSize: pulumi.Int(2),
+				DesiredSize: pulumi.Int(1),
 				MaxSize:     pulumi.Int(2),
 				MinSize:     pulumi.Int(1),
 			},
