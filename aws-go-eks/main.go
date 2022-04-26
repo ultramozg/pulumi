@@ -487,10 +487,15 @@ func generateKubeconfig(clusterEndpoint pulumi.StringOutput, certData pulumi.Str
             "user": {
                 "exec": {
                     "apiVersion": "client.authentication.k8s.io/v1alpha1",
-                    "command": "aws-iam-authenticator",
+                    "command": "aws",
                     "args": [
-                        "token",
-                        "-i",
+						"--region",
+						"eu-west-1",
+						"--profile",
+						"my-admin-account",
+						"eks",
+						"get-token",
+                        "--cluster-name",
                         "%s",
                     ],
                 },
