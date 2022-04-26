@@ -376,12 +376,16 @@ func main() {
 			return err
 		}
 
+		ca := eksCluster.CertificateAuthorities.ApplyT(func(certificateAuthorities []eks.ClusterCertificateAuthority) (string, error) {
+			return (*certificateAuthorities[0].Data), nil
+		}).(pulumi.StringOutput)
+
 		ctx.Export("kubeconfig", generateKubeconfig(eksCluster.Endpoint,
-			(pulumi.StringOutput)(eksCluster.CertificateAuthorities), eksCluster.Name))
+			ca, eksCluster.Name))
 
 		k8sProvider, err := providers.NewProvider(ctx, "k8sprovider", &providers.ProviderArgs{
 			Kubeconfig: generateKubeconfig(eksCluster.Endpoint,
-				(pulumi.StringOutput)(eksCluster.CertificateAuthorities), eksCluster.Name),
+				ca, eksCluster.Name),
 		}, pulumi.DependsOn([]pulumi.Resource{nodeGroup}))
 		if err != nil {
 			return err
