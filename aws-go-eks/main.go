@@ -50,68 +50,39 @@ func main() {
 		// Purpose: A subnet is a range of IP addresses in your VPC.
 		// Docs: https://docs.aws.amazon.com/vpc/latest/userguide/configure-subnets.html
 
+		availabilityZones := []string{"eu-west-1a", "eu-west-1b", "eu-west-1c"}
+
+		privSubnets := []*ec2.Subnet{}
 		// 3 Private Subnets
-		resourceTags["Name"] = prefix + "-priv-subnet-1"
-		privSubnet1, err := ec2.NewSubnet(ctx, prefix+"-priv-subnet-1", &ec2.SubnetArgs{
-			VpcId:            vpc.ID(),
-			CidrBlock:        pulumi.String("10.0.1.0/24"),
-			AvailabilityZone: pulumi.String("eu-west-1a"),
-			Tags:             pulumi.ToStringMap(resourceTags),
-		})
-		if err != nil {
-			return err
-		}
-		resourceTags["Name"] = prefix + "-priv-subnet-2"
-		privSubnet2, err := ec2.NewSubnet(ctx, prefix+"-priv-subnet-2", &ec2.SubnetArgs{
-			VpcId:            vpc.ID(),
-			CidrBlock:        pulumi.String("10.0.2.0/24"),
-			AvailabilityZone: pulumi.String("eu-west-1b"),
-			Tags:             pulumi.ToStringMap(resourceTags),
-		})
-		if err != nil {
-			return err
-		}
-		resourceTags["Name"] = prefix + "-priv-subnet-3"
-		privSubnet3, err := ec2.NewSubnet(ctx, prefix+"-priv-subnet-3", &ec2.SubnetArgs{
-			VpcId:            vpc.ID(),
-			CidrBlock:        pulumi.String("10.0.3.0/24"),
-			AvailabilityZone: pulumi.String("eu-west-1c"),
-			Tags:             pulumi.ToStringMap(resourceTags),
-		})
-		if err != nil {
-			return err
+		for i := 1; i <= 3; i++ {
+			resourceTags["Name"] = fmt.Sprintf("%s-%s-%d", prefix, "priv-sub", i)
+			sub, err := ec2.NewSubnet(ctx, fmt.Sprintf("%s-%s-%d", prefix, "priv-sub", i), &ec2.SubnetArgs{
+				VpcId:            vpc.ID(),
+				CidrBlock:        pulumi.String(fmt.Sprintf("10.0.%d.0/24", i)),
+				AvailabilityZone: pulumi.String(availabilityZones[i%3]),
+				Tags:             pulumi.ToStringMap(resourceTags),
+			})
+			if err != nil {
+				return err
+			}
+			privSubnets = append(privSubnets, sub)
 		}
 
 		// 3 Public Subnets
-		resourceTags["Name"] = prefix + "-pub-subnet-1"
-		pubSubnet1, err := ec2.NewSubnet(ctx, prefix+"-pub-subnet-1", &ec2.SubnetArgs{
-			VpcId:            vpc.ID(),
-			CidrBlock:        pulumi.String("10.0.4.0/24"),
-			AvailabilityZone: pulumi.String("eu-west-1a"),
-			Tags:             pulumi.ToStringMap(resourceTags),
-		})
-		if err != nil {
-			return err
-		}
-		resourceTags["Name"] = prefix + "-pub-subnet-2"
-		pubSubnet2, err := ec2.NewSubnet(ctx, prefix+"-pub-subnet-2", &ec2.SubnetArgs{
-			VpcId:            vpc.ID(),
-			CidrBlock:        pulumi.String("10.0.5.0/24"),
-			AvailabilityZone: pulumi.String("eu-west-1b"),
-			Tags:             pulumi.ToStringMap(resourceTags),
-		})
-		if err != nil {
-			return err
-		}
-		resourceTags["Name"] = prefix + "-pub-subnet-3"
-		pubSubnet3, err := ec2.NewSubnet(ctx, prefix+"-pub-subnet-3", &ec2.SubnetArgs{
-			VpcId:            vpc.ID(),
-			CidrBlock:        pulumi.String("10.0.6.0/24"),
-			AvailabilityZone: pulumi.String("eu-west-1c"),
-			Tags:             pulumi.ToStringMap(resourceTags),
-		})
-		if err != nil {
-			return err
+		pubSubnets := []*ec2.Subnet{}
+		// 3 Private Subnets
+		for i := 4; i <= 6; i++ {
+			resourceTags["Name"] = fmt.Sprintf("%s-%s-%d", prefix, "pub-sub", i)
+			sub, err := ec2.NewSubnet(ctx, fmt.Sprintf("%s-%s-%d", prefix, "pub-sub", i), &ec2.SubnetArgs{
+				VpcId:            vpc.ID(),
+				CidrBlock:        pulumi.String(fmt.Sprintf("10.0.%d.0/24", i)),
+				AvailabilityZone: pulumi.String(availabilityZones[i%3]),
+				Tags:             pulumi.ToStringMap(resourceTags),
+			})
+			if err != nil {
+				return err
+			}
+			pubSubnets = append(pubSubnets, sub)
 		}
 
 		// Resource: Elastic IP
@@ -131,11 +102,12 @@ func main() {
 		// Docs: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html
 
 		// NAT Gateway with EIP
+		// this is the cheaper solution, because it's using only one AZ
 		resourceTags["Name"] = prefix + "-nat-gw-1"
 		natGw1, err := ec2.NewNatGateway(ctx, prefix+"-nat-gw-1", &ec2.NatGatewayArgs{
 			AllocationId: eip1.ID(),
 			// NAT must reside in public subnet for private instance internet access
-			SubnetId: pubSubnet1.ID(),
+			SubnetId: pubSubnets[0].ID(),
 			Tags:     pulumi.ToStringMap(resourceTags),
 		})
 		if err != nil {
@@ -195,53 +167,25 @@ func main() {
 		}
 
 		// Associate Private Subs with Private Route Tables
-		_, err = ec2.NewRouteTableAssociation(ctx, prefix+"-rtb-assoc-priv-1", &ec2.RouteTableAssociationArgs{
-			SubnetId:     privSubnet1.ID(),
-			RouteTableId: privateRouteTable.ID(),
-		})
-		if err != nil {
-			return err
-		}
-
-		_, err = ec2.NewRouteTableAssociation(ctx, prefix+"-rtb-assoc-priv-2", &ec2.RouteTableAssociationArgs{
-			SubnetId:     privSubnet2.ID(),
-			RouteTableId: privateRouteTable.ID(),
-		})
-		if err != nil {
-			return err
-		}
-
-		_, err = ec2.NewRouteTableAssociation(ctx, prefix+"-rtb-assoc-priv-3", &ec2.RouteTableAssociationArgs{
-			SubnetId:     privSubnet3.ID(),
-			RouteTableId: privateRouteTable.ID(),
-		})
-		if err != nil {
-			return err
+		for i, v := range privSubnets {
+			_, err = ec2.NewRouteTableAssociation(ctx, fmt.Sprintf("%s-rtb-priv-%d", prefix, i), &ec2.RouteTableAssociationArgs{
+				SubnetId:     v.ID(),
+				RouteTableId: privateRouteTable.ID(),
+			})
+			if err != nil {
+				return err
+			}
 		}
 
 		// Associate Public Subs with Public Route Tables
-		_, err = ec2.NewRouteTableAssociation(ctx, prefix+"-rtb-assoc-pub-1", &ec2.RouteTableAssociationArgs{
-			SubnetId:     pubSubnet1.ID(),
-			RouteTableId: publicRouteTable.ID(),
-		})
-		if err != nil {
-			return err
-		}
-
-		_, err = ec2.NewRouteTableAssociation(ctx, prefix+"-rtb-assoc-pub-2", &ec2.RouteTableAssociationArgs{
-			SubnetId:     pubSubnet2.ID(),
-			RouteTableId: publicRouteTable.ID(),
-		})
-		if err != nil {
-			return err
-		}
-
-		_, err = ec2.NewRouteTableAssociation(ctx, prefix+"-rtb-assoc-pub-3", &ec2.RouteTableAssociationArgs{
-			SubnetId:     pubSubnet3.ID(),
-			RouteTableId: publicRouteTable.ID(),
-		})
-		if err != nil {
-			return err
+		for i, v := range pubSubnets {
+			_, err = ec2.NewRouteTableAssociation(ctx, fmt.Sprintf("%s-rtb-pub-%d", prefix, i), &ec2.RouteTableAssociationArgs{
+				SubnetId:     v.ID(),
+				RouteTableId: publicRouteTable.ID(),
+			})
+			if err != nil {
+				return err
+			}
 		}
 
 		// Resource: IAM Role
@@ -331,6 +275,17 @@ func main() {
 		if err != nil {
 			return err
 		}
+
+		privSubnetsIDs := pulumi.StringArray{}
+		for _, v := range privSubnets {
+			privSubnetsIDs = append(privSubnetsIDs, v.ID())
+		}
+
+		pubSubnetsIDs := pulumi.StringArray{}
+		for _, v := range pubSubnets {
+			pubSubnetsIDs = append(pubSubnetsIDs, v.ID())
+		}
+
 		// Create EKS Cluster
 		eksCluster, err := eks.NewCluster(ctx, "eks-cluster", &eks.ClusterArgs{
 			RoleArn: pulumi.StringInput(eksRole.Arn),
@@ -341,14 +296,7 @@ func main() {
 				SecurityGroupIds: pulumi.StringArray{
 					clusterSg.ID().ToStringOutput(),
 				},
-				SubnetIds: pulumi.StringArray{
-					privSubnet1.ID(),
-					privSubnet2.ID(),
-					privSubnet3.ID(),
-					pubSubnet1.ID(),
-					pubSubnet2.ID(),
-					pubSubnet3.ID(),
-				},
+				SubnetIds: append(privSubnetsIDs, pubSubnetsIDs...),
 			},
 		})
 		if err != nil {
@@ -361,11 +309,7 @@ func main() {
 			NodeRoleArn:   pulumi.StringInput(nodeGroupRole.Arn),
 			InstanceTypes: pulumi.StringArray{pulumi.String("t3.medium")},
 			CapacityType:  pulumi.String("SPOT"),
-			SubnetIds: pulumi.StringArray{
-				privSubnet1.ID(),
-				privSubnet2.ID(),
-				privSubnet3.ID(),
-			},
+			SubnetIds:     privSubnetsIDs,
 			ScalingConfig: &eks.NodeGroupScalingConfigArgs{
 				DesiredSize: pulumi.Int(1),
 				MaxSize:     pulumi.Int(2),
