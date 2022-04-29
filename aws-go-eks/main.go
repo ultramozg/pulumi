@@ -303,6 +303,16 @@ func main() {
 			return err
 		}
 
+		// Get cluster information, after that we should create OIDC Idnetity provider
+		eksData, err := eks.GetCluster(ctx, eksCluster.Name.ElementType().String(), eksCluster.ID(), &eks.ClusterState{})
+		if err != nil {
+			return err
+		}
+
+		ctx.Export("oidc-url", eksData.Identities.Index(pulumi.Int(0)).Oidcs().Index(pulumi.Int(0)).Issuer())
+
+		// END
+
 		nodeGroup, err := eks.NewNodeGroup(ctx, "node-group-2", &eks.NodeGroupArgs{
 			ClusterName:   eksCluster.Name,
 			NodeGroupName: pulumi.String("demo-eks-nodegroup-2"),
