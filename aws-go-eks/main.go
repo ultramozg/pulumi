@@ -303,14 +303,15 @@ func main() {
 			return err
 		}
 
-		// Get cluster information, after that we should create OIDC Idnetity provider
-		eksData, err := eks.GetCluster(ctx, eksCluster.Name.ElementType().String(), eksCluster.ID(), &eks.ClusterState{})
+		oidcProvider, err := iam.NewOpenIdConnectProvider(ctx, "eks-oidc", &iam.OpenIdConnectProviderArgs{
+			ClientIdLists:   pulumi.StringArray{pulumi.String("sts.amazonaws.com")},
+			ThumbprintLists: pulumi.StringArray{},
+			Url:             eksCluster.Identities.Index(pulumi.Int(0)).Oidcs().Index(pulumi.Int(0)).Issuer().Elem().ToStringOutput(),
+		})
 		if err != nil {
 			return err
 		}
-
-		ctx.Export("oidc-url", eksData.Identities.Index(pulumi.Int(0)).Oidcs().Index(pulumi.Int(0)).Issuer())
-
+		fmt.Println(oidcProvider)
 		// END
 
 		nodeGroup, err := eks.NewNodeGroup(ctx, "node-group-2", &eks.NodeGroupArgs{
