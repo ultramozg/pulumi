@@ -1,7 +1,12 @@
 package main
 
 import (
+	"crypto/sha1"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
+	"net/url"
 
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws/eks"
@@ -303,10 +308,23 @@ func main() {
 			return err
 		}
 
+		oidc_url := eksCluster.Identities.Index(pulumi.Int(0)).Oidcs().Index(pulumi.Int(0)).Issuer().Elem().ToStringOutput()
+		thumbprint := oidc_url.ApplyT(func(url string) string {
+			res, err := getThumbprint(oidc_url.ToStringOutput().ElementType().String())
+			if err != nil {
+				fmt.Println("ERROR: ", err)
+			}
+			return res
+		}).(pulumi.StringOutput)
+		fmt.Println(thumbprint.ToStringOutput().ElementType().String())
+
+		if err != nil {
+			return err
+		}
 		oidcProvider, err := iam.NewOpenIdConnectProvider(ctx, "eks-oidc", &iam.OpenIdConnectProviderArgs{
 			ClientIdLists:   pulumi.StringArray{pulumi.String("sts.amazonaws.com")},
-			ThumbprintLists: pulumi.StringArray{},
-			Url:             eksCluster.Identities.Index(pulumi.Int(0)).Oidcs().Index(pulumi.Int(0)).Issuer().Elem().ToStringOutput(),
+			ThumbprintLists: pulumi.StringArray{pulumi.StringInput(thumbprint)},
+			Url:             oidc_url,
 		})
 		if err != nil {
 			return err
@@ -465,4 +483,31 @@ func toPulumiStringArray(a []string) pulumi.StringArrayInput {
 		res = append(res, pulumi.String(s))
 	}
 	return pulumi.StringArray(res)
+}
+
+func getThumbprint(oidc_issuer string) (string, error) {
+	url, err := url.Parse(oidc_issuer)
+	if err != nil {
+		return "", err
+	}
+
+	conn, err := tls.Dial("tcp", url.Hostname()+":443", &tls.Config{
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	cs := conn.ConnectionState()
+	numCerts := len(cs.PeerCertificates)
+	var root *x509.Certificate
+	// Important! Get the last cert in the chain, which is the root CA.
+	if numCerts >= 1 {
+		root = cs.PeerCertificates[numCerts-1]
+	} else {
+		return "", errors.New("Error getting cert list from connection \n")
+	}
+	// print out the fingerprint
+	return fmt.Sprintf("%x", sha1.Sum(root.Raw)), nil
 }
