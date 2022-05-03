@@ -1,36 +1,43 @@
 package main
 
 import (
-	"bytes"
-	"crypto/md5"
+	"crypto/sha1"
 	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
+	"os"
 )
 
 func main() {
-	// Parse cmdline arguments using flag package
-	server := flag.String("server", "abhi.host", "Server to ping")
-	port := flag.Uint("port", 443, "Port that has TLS")
+	host := flag.String("hostname", "oidc.eks.eu-west-1.amazonaws.com", "Hostname to get root CA fingerprint for")
+	port := flag.Int("port", 443, "Port to query")
+	debug := flag.Bool("debug", false, "Print cert CN to stderr")
 	flag.Parse()
 
-	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", *server, *port), &tls.Config{})
+	target := fmt.Sprintf("%s:%d", *host, *port)
+	conn, err := tls.Dial("tcp", target, &tls.Config{
+		InsecureSkipVerify: true,
+	})
 	if err != nil {
-		panic("failed to connect: " + err.Error())
+		fmt.Printf("Error dialing remote host: %v\n", err)
+		os.Exit(1)
 	}
+	defer conn.Close()
 
-	// Get the ConnectionState struct as that's the one which gives us x509.Certificate struct
-	cert := conn.ConnectionState().PeerCertificates[0]
-	fingerprint := md5.Sum(cert.Raw)
-
-	var buf bytes.Buffer
-	for i, f := range fingerprint {
-		if i > 0 {
-			fmt.Fprintf(&buf, ":")
-		}
-		fmt.Fprintf(&buf, "%02X", f)
+	cs := conn.ConnectionState()
+	numCerts := len(cs.PeerCertificates)
+	var root *x509.Certificate
+	// Important! Get the last cert in the chain, which is the root CA.
+	if numCerts >= 1 {
+		root = cs.PeerCertificates[numCerts-1]
+	} else {
+		fmt.Printf("Error getting cert list from connection \n")
+		os.Exit(1)
 	}
-	fmt.Printf("Fingerprint for %s: %s", *server, buf.String())
-
-	conn.Close()
+	if *debug {
+		fmt.Fprintf(os.Stderr, "%s\n", root.Subject.CommonName)
+	}
+	// print out the fingerprint
+	fmt.Printf("%x\n", sha1.Sum(root.Raw))
 }
