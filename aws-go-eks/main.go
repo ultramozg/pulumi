@@ -316,7 +316,6 @@ func main() {
 			}
 			return res
 		}).(pulumi.StringOutput)
-		fmt.Println(thumbprint.ToStringOutput().ElementType().String())
 
 		if err != nil {
 			return err
