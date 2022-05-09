@@ -310,7 +310,7 @@ func main() {
 
 		oidc_url := eksCluster.Identities.Index(pulumi.Int(0)).Oidcs().Index(pulumi.Int(0)).Issuer().Elem().ToStringOutput()
 		thumbprint := oidc_url.ApplyT(func(url string) string {
-			res, err := getThumbprint(oidc_url.ToStringOutput().ElementType().String())
+			res, err := getThumbprint(url)
 			if err != nil {
 				fmt.Println("ERROR: ", err)
 			}
