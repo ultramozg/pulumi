@@ -13,6 +13,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws/iam"
 	appsv1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/apps/v1"
 	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/core/v1"
+	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/helm/v3"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/meta/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/providers"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -363,6 +364,20 @@ func main() {
 			return err
 		}
 
+		/* DEPLOYMENTS */
+		chart, err := helm.NewChart(ctx, "metrics-server", helm.ChartArgs{
+			Chart:     pulumi.String("metrics-server"),
+			Version:   pulumi.String("3.8.2"),
+			Namespace: pulumi.String("kube-system"),
+			FetchArgs: helm.FetchArgs{
+				Repo: pulumi.String("https://kubernetes-sigs.github.io/metrics-server/"),
+			},
+		}, pulumi.Provider(k8sProvider))
+		if err != nil {
+			return err
+		}
+		fmt.Println(chart)
+
 		namespace, err := corev1.NewNamespace(ctx, "app", &corev1.NamespaceArgs{
 			Metadata: &metav1.ObjectMetaArgs{
 				Name: pulumi.String("app"),
@@ -421,6 +436,7 @@ func main() {
 		if err != nil {
 			return err
 		}
+		/* END */
 
 		ctx.Export("url", service.Status.ApplyT(func(status *corev1.ServiceStatus) *string {
 			ingress := status.LoadBalancer.Ingress[0]
