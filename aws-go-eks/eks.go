@@ -10,7 +10,12 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*providers.Provider, error) {
+type eksResources struct {
+	k8sProvider *providers.Provider
+	oidcUrl     pulumi.StringOutput
+}
+
+func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResources, error) {
 
 	// Resource: IAM Role
 	// Purpose: An IAM role is an IAM identity that you can create in your account that has specific permissions.
@@ -181,5 +186,5 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*providers.P
 		return nil, err
 	}
 
-	return k8sProvider, nil
+	return &eksResources{k8sProvider, oidc_url}, nil
 }
