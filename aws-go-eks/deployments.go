@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws/iam"
@@ -34,38 +35,35 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 	}
 
 	// we should get oidc provider & account_id
-	/*
-		url := eksResources.oidcUrl.ApplyT(func(url string) string {
-			return url
-		}).(pulumi.StringOutput)
-	*/
-
-	tmpAlbRole, err := json.Marshal(map[string]interface{}{
-		"Version": "2012-10-17",
-		"Statement": []map[string]interface{}{
-			map[string]interface{}{
-				"Action": "sts:AssumeRoleWithWebIdentity",
-				"Effect": "Allow",
-				"Sid":    "",
-				"Principal": map[string]interface{}{
-					//                                                    /<OIDC provider without https://
-					"Federated": "arn:aws:iam::" + current.AccountId + ":oidc-provider/" + eksResources.oidcUrl.ToStringOutput().ElementType().String(),
-				},
-				"Condition": map[string]interface{}{
-					"StringEquals": map[string]interface{}{
-						// Something like this , should be changed OIDC provider without https://
-						eksResources.oidcUrl.ToStringOutput().ElementType().String() + ":sub": "system:serviceaccount:kube-system:aws-load-balancer-controller",
+	jsonPolicy := eksResources.oidcUrl.ApplyT(func(url string) string {
+		tmpAlbRole, err := json.Marshal(map[string]interface{}{
+			"Version": "2012-10-17",
+			"Statement": []map[string]interface{}{
+				map[string]interface{}{
+					"Action": "sts:AssumeRoleWithWebIdentity",
+					"Effect": "Allow",
+					"Sid":    "",
+					"Principal": map[string]interface{}{
+						//                                                    /<OIDC provider without https://
+						"Federated": "arn:aws:iam::" + current.AccountId + ":oidc-provider/" + strings.TrimPrefix(url, "https://"),
+					},
+					"Condition": map[string]interface{}{
+						"StringEquals": map[string]interface{}{
+							// Something like this , should be changed OIDC provider without https://
+							strings.TrimPrefix(url, "https://") + ":sub": "system:serviceaccount:kube-system:aws-load-balancer-controller",
+						},
 					},
 				},
 			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-	json0 := string(tmpAlbRole)
+		})
+		if err != nil {
+			return "ERROR: " + err.Error()
+		}
+		return string(tmpAlbRole)
+	}).(pulumi.StringOutput)
+
 	albRole, err := iam.NewRole(ctx, "albRole", &iam.RoleArgs{
-		AssumeRolePolicy: pulumi.String(json0),
+		AssumeRolePolicy: pulumi.StringInput(jsonPolicy),
 		Tags: pulumi.StringMap{
 			"tag-key": pulumi.String("tag-value"),
 		},
