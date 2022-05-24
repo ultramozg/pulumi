@@ -17,12 +17,12 @@ func main() {
 			return err
 		}
 
-		k8sProvider, err := setupEKS(ctx, netResources)
+		eksResources, err := setupEKS(ctx, netResources)
 		if err != nil {
 			return err
 		}
 
-		err = setupDeployments(ctx, k8sProvider)
+		err = setupDeployments(ctx, eksResources)
 		if err != nil {
 			return err
 		}
