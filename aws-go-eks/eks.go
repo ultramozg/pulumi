@@ -13,6 +13,7 @@ import (
 type eksResources struct {
 	k8sProvider *providers.Provider
 	oidcUrl     pulumi.StringOutput
+	eksCluster  *eks.Cluster
 }
 
 func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResources, error) {
@@ -186,5 +187,5 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResource
 		return nil, err
 	}
 
-	return &eksResources{k8sProvider, oidc_url}, nil
+	return &eksResources{k8sProvider, oidc_url, eksCluster}, nil
 }
