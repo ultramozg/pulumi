@@ -60,7 +60,6 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 		return string(tmpAlbRole)
 	}).(pulumi.StringOutput)
 
-<<<<<<< HEAD
 	file, _ := ioutil.ReadFile("policies/alb_iam_policy.json")
 	albRole, err := iam.NewRole(ctx, "albRole", &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.StringInput(jsonPolicy),
@@ -73,13 +72,6 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 		Tags: pulumi.StringMap{
 			"tag-key": pulumi.String("tag-value"),
 		},
-=======
-	albRole, err := iam.NewRole(ctx, "albRole", &iam.RoleArgs{
-		AssumeRolePolicy: pulumi.StringInput(jsonPolicy),
-		Tags: pulumi.StringMap{
-			"tag-key": pulumi.String("tag-value"),
-		},
->>>>>>> 6f49f1efcf3a82266255fa46fbf1f0cbdc2387e9
 	})
 	fmt.Println(albRole)
 
