@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws"
@@ -59,8 +60,15 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 		return string(tmpAlbRole)
 	}).(pulumi.StringOutput)
 
+	file, _ := ioutil.ReadFile("policies/alb_iam_policy.json")
 	albRole, err := iam.NewRole(ctx, "albRole", &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.StringInput(jsonPolicy),
+		InlinePolicies: iam.RoleInlinePolicyArray{
+			&iam.RoleInlinePolicyArgs{
+				Name:   pulumi.String("policy_for_loadbalancer_controller"),
+				Policy: pulumi.String(file),
+			},
+		},
 		Tags: pulumi.StringMap{
 			"tag-key": pulumi.String("tag-value"),
 		},
