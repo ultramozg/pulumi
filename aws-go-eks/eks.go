@@ -144,7 +144,7 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResource
 	if err != nil {
 		return nil, err
 	}
-	oidcProvider, err := iam.NewOpenIdConnectProvider(ctx, "eks-oidc", &iam.OpenIdConnectProviderArgs{
+	_, err = iam.NewOpenIdConnectProvider(ctx, "eks-oidc", &iam.OpenIdConnectProviderArgs{
 		ClientIdLists:   pulumi.StringArray{pulumi.String("sts.amazonaws.com")},
 		ThumbprintLists: pulumi.StringArray{pulumi.StringInput(thumbprint)},
 		Url:             oidc_url,
@@ -152,7 +152,6 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResource
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(oidcProvider)
 	// END
 
 	nodeGroup, err := eks.NewNodeGroup(ctx, "node-group-2", &eks.NodeGroupArgs{
@@ -168,8 +167,8 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResource
 			MinSize:     pulumi.Int(1),
 		},
 		Tags: pulumi.StringMap{
-			fmt.Sprintf("k8s.io/cluster-autoscaler/%s", pulumi.StringInput(eksCluster.Name)): pulumi.String("owned"),
-			"k8s.io/cluster-autoscaler/enabled":                                              pulumi.String("true"),
+			fmt.Sprintf("k8s.io/cluster-autoscaler/%s", eksCluster.Name): pulumi.String("owned"),
+			"k8s.io/cluster-autoscaler/enabled":                          pulumi.String("true"),
 		},
 	})
 	if err != nil {
