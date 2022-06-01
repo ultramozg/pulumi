@@ -167,6 +167,10 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResource
 			MaxSize:     pulumi.Int(2),
 			MinSize:     pulumi.Int(1),
 		},
+		Tags: pulumi.StringMap{
+			fmt.Sprintf("k8s.io/cluster-autoscaler/%s", pulumi.StringInput(eksCluster.Name)): pulumi.String("owned"),
+			"k8s.io/cluster-autoscaler/enabled":                                              pulumi.String("true"),
+		},
 	})
 	if err != nil {
 		return nil, err
