@@ -14,7 +14,7 @@ import (
 
 func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 	/* DEPLOYMENTS */
-	chart, err := helm.NewChart(ctx, "metrics-server", helm.ChartArgs{
+	_, err := helm.NewChart(ctx, "metrics-server", helm.ChartArgs{
 		Chart:     pulumi.String("metrics-server"),
 		Version:   pulumi.String("3.8.2"),
 		Namespace: pulumi.String("kube-system"),
@@ -25,7 +25,6 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(chart)
 
 	current, err := aws.GetCallerIdentity(ctx, nil, nil)
 	if err != nil {
@@ -96,6 +95,78 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 	// END of ALB controller
 
 	// Start of Cluster autoscaler
+	jsonPolicyForAutoscaler := eksResources.oidcUrl.ApplyT(func(url string) string {
+		tmpAutoscalingRole, err := json.Marshal(map[string]interface{}{
+			"Version": "2012-10-17",
+			"Statement": []map[string]interface{}{
+				map[string]interface{}{
+					"Action": "sts:AssumeRoleWithWebIdentity",
+					"Effect": "Allow",
+					"Sid":    "",
+					"Principal": map[string]interface{}{
+						//                                                    /<OIDC provider without https://
+						"Federated": "arn:aws:iam::" + current.AccountId + ":oidc-provider/" + strings.TrimPrefix(url, "https://"),
+					},
+					"Condition": map[string]interface{}{
+						"StringEquals": map[string]interface{}{
+							// Something like this , should be changed OIDC provider without https://
+							strings.TrimPrefix(url, "https://") + ":sub": "system:serviceaccount:kube-system:eks-autoscaler",
+						},
+					},
+				},
+			},
+		})
+		if err != nil {
+			return "ERROR: " + err.Error()
+		}
+		return string(tmpAutoscalingRole)
+	}).(pulumi.StringOutput)
+
+	jsonAutoscalingPolicy, _ := json.Marshal(map[string]interface{}{
+		"Version": "2012-10-17",
+		"Statement": []map[string]interface{}{
+			map[string]interface{}{
+				"Sid":    "",
+				"Effect": "Allow",
+				"Action": []string{
+					"autoscaling:SetDesiredCapacity",
+					"autoscaling:TerminateInstanceInAutoScalingGroup",
+				},
+				"Resource": "*",
+				"Condition": map[string]interface{}{
+					"StringEquals": map[string]interface{}{
+						fmt.Sprintf("aws:ResourceTag/k8s.io/cluster-autoscaler/%s", pulumi.StringInput(eksResources.eksCluster.Name)): "owned",
+					},
+				},
+			},
+			map[string]interface{}{
+				"Sid":    "",
+				"Effect": "Allow",
+				"Action": []string{
+					"autoscaling:DescribeAutoScalingInstances",
+					"autoscaling:DescribeAutoScalingGroups",
+					"ec2:DescribeLaunchTemplateVersions",
+					"autoscaling:DescribeTags",
+					"autoscaling:DescribeLaunchConfigurations",
+				},
+				"Resource": "*",
+			},
+		},
+	})
+
+	_, err = iam.NewRole(ctx, "cluster-autoscaler-role", &iam.RoleArgs{
+		AssumeRolePolicy: pulumi.StringInput(jsonPolicyForAutoscaler),
+		InlinePolicies: iam.RoleInlinePolicyArray{
+			&iam.RoleInlinePolicyArgs{
+				Name:   pulumi.String("policy-for-autoscaling"),
+				Policy: pulumi.String(jsonAutoscalingPolicy),
+			},
+		},
+		Tags: pulumi.StringMap{
+			"tag-key": pulumi.String("tag-value"),
+		},
+	})
+
 	// END of Cluster autoscaler
 
 	return nil
