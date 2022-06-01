@@ -110,7 +110,7 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 					"Condition": map[string]interface{}{
 						"StringEquals": map[string]interface{}{
 							// Something like this , should be changed OIDC provider without https://
-							strings.TrimPrefix(url, "https://") + ":sub": "system:serviceaccount:kube-system:eks-autoscaler",
+							strings.TrimPrefix(url, "https://") + ":sub": "system:serviceaccount:kube-system:eks-autoscaler-sa",
 						},
 					},
 				},
@@ -154,7 +154,7 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 		},
 	})
 
-	_, err = iam.NewRole(ctx, "cluster-autoscaler-role", &iam.RoleArgs{
+	clusterAutoscalerRole, err := iam.NewRole(ctx, "cluster-autoscaler-role", &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.StringInput(jsonPolicyForAutoscaler),
 		InlinePolicies: iam.RoleInlinePolicyArray{
 			&iam.RoleInlinePolicyArgs{
@@ -166,6 +166,27 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 			"tag-key": pulumi.String("tag-value"),
 		},
 	})
+
+	_, err = helm.NewChart(ctx, "cluster-autoscaler", helm.ChartArgs{
+		Chart:     pulumi.String("autoscaler/cluster-autoscaler"),
+		Version:   pulumi.String("9.19.0"),
+		Namespace: pulumi.String("kube-system"),
+		FetchArgs: helm.FetchArgs{
+			Repo: pulumi.String("https://kubernetes.github.io/autoscaler"),
+		},
+		Values: pulumi.Map{
+			"autoDiscovery.clusterName": pulumi.StringInput(eksResources.eksCluster.Name),
+			"rbac": pulumi.Map{
+				"serviceAccount": pulumi.Map{
+					"name":        pulumi.String("eks-autoscaler-sa"),
+					"annotations": pulumi.StringInput(clusterAutoscalerRole.Arn),
+				},
+			},
+		},
+	}, pulumi.Provider(eksResources.k8sProvider))
+	if err != nil {
+		return err
+	}
 
 	// END of Cluster autoscaler
 
