@@ -33,6 +33,7 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 	}
 
 	// we should get oidc provider & account_id
+	// ALB controller
 	jsonPolicy := eksResources.oidcUrl.ApplyT(func(url string) string {
 		tmpAlbRole, err := json.Marshal(map[string]interface{}{
 			"Version": "2012-10-17",
@@ -93,6 +94,10 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 	if err != nil {
 		return err
 	}
+	// END of ALB controller
+
+	// Start of Cluster autoscaler
+	// END of Cluster autoscaler
 
 	return nil
 }
