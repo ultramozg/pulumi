@@ -61,7 +61,7 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 	}).(pulumi.StringOutput)
 
 	file, _ := ioutil.ReadFile("policies/alb_iam_policy.json")
-	_, err = iam.NewRole(ctx, "application-load-balancer-role", &iam.RoleArgs{
+	clusterLoadBalancerRole, err := iam.NewRole(ctx, "application-load-balancer-role", &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.StringInput(jsonPolicy),
 		InlinePolicies: iam.RoleInlinePolicyArray{
 			&iam.RoleInlinePolicyArgs{
@@ -84,8 +84,9 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 		Values: pulumi.Map{
 			"clusterName": eksResources.eksCluster.Name,
 			"serviceAccount": pulumi.Map{
-				"create": pulumi.String("true"),
-				"name":   pulumi.String("aws-load-balancer-controller"),
+				"create":      pulumi.String("true"),
+				"name":        pulumi.String("aws-load-balancer-controller"),
+				"annotations": pulumi.StringInput(clusterLoadBalancerRole.Arn),
 			},
 		},
 	}, pulumi.Provider(eksResources.k8sProvider))
