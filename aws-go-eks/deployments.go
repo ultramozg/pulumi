@@ -62,7 +62,7 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 	}).(pulumi.StringOutput)
 
 	file, _ := ioutil.ReadFile("policies/alb_iam_policy.json")
-	albRole, err := iam.NewRole(ctx, "albRole", &iam.RoleArgs{
+	_, err = iam.NewRole(ctx, "application-load-balancer-role", &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.StringInput(jsonPolicy),
 		InlinePolicies: iam.RoleInlinePolicyArray{
 			&iam.RoleInlinePolicyArgs{
@@ -74,7 +74,6 @@ func setupDeployments(ctx *pulumi.Context, eksResources *eksResources) error {
 			"tag-key": pulumi.String("tag-value"),
 		},
 	})
-	fmt.Println(albRole)
 
 	_, err = helm.NewChart(ctx, "aws-load-balancer-controller", helm.ChartArgs{
 		Chart:     pulumi.String("aws-load-balancer-controller"),
