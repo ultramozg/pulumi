@@ -1,3 +1,19 @@
 config:
+  aws-go-eks:network:
+    vpc: 10.0.0.0/16
+    privateSubnets:
+    - name: private-subnet-01
+      cidr: 10.0.1.0/24
+    - name: private-subnet-02
+      cidr: 10.0.2.0/24
+    - name: private-subnet-03
+      cidr: 10.0.3.0/24
+    publicSubnets:
+    - name: public-subnet-01
+      cidr: 10.0.4.0/24
+    - name: public-subnet-02
+      cidr: 10.0.5.0/24
+    - name: public-subnet-03
+      cidr: 10.0.6.0/24
   aws:profile: my-admin-account
   aws:region: eu-west-1
