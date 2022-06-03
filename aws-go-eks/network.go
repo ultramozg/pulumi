@@ -13,7 +13,7 @@ type networkResources struct {
 	privSubnets []*ec2.Subnet
 }
 
-func setupNetwork(ctx *pulumi.Context) (*networkResources, error) {
+func setupNetwork(ctx *pulumi.Context, netConfig *networkData) (*networkResources, error) {
 	prefix := "pulumi-eks-go"
 	resourceTags := make(map[string]string)
 
@@ -21,13 +21,10 @@ func setupNetwork(ctx *pulumi.Context) (*networkResources, error) {
 	resourceTags["GitOrg"] = "gsweene2"
 	resourceTags["GitRepo"] = "pulumi"
 
-	// VPC CIDR
-	cidrBlock := "10.0.0.0/16"
-
 	// VPC Args
 	resourceTags["Name"] = prefix + "-vpc"
 	vpcArgs := &ec2.VpcArgs{
-		CidrBlock:          pulumi.String(cidrBlock),
+		CidrBlock:          pulumi.String(netConfig.Vpc),
 		EnableDnsHostnames: pulumi.Bool(true),
 		InstanceTenancy:    pulumi.String("default"),
 		Tags:               pulumi.ToStringMap(resourceTags),
@@ -48,11 +45,11 @@ func setupNetwork(ctx *pulumi.Context) (*networkResources, error) {
 
 	privSubnets := []*ec2.Subnet{}
 	// 3 Private Subnets
-	for i := 1; i <= 3; i++ {
-		resourceTags["Name"] = fmt.Sprintf("%s-%s-%d", prefix, "priv-sub", i)
-		sub, err := ec2.NewSubnet(ctx, fmt.Sprintf("%s-%s-%d", prefix, "priv-sub", i), &ec2.SubnetArgs{
+	for i, s := range netConfig.PrivateSubnets {
+		resourceTags["Name"] = s.Name
+		sub, err := ec2.NewSubnet(ctx, s.Name, &ec2.SubnetArgs{
 			VpcId:            vpc.ID(),
-			CidrBlock:        pulumi.String(fmt.Sprintf("10.0.%d.0/24", i)),
+			CidrBlock:        pulumi.String(s.Cidr),
 			AvailabilityZone: pulumi.String(availabilityZones[i%3]),
 			Tags:             pulumi.ToStringMap(resourceTags),
 		})
@@ -65,11 +62,11 @@ func setupNetwork(ctx *pulumi.Context) (*networkResources, error) {
 	// 3 Public Subnets
 	pubSubnets := []*ec2.Subnet{}
 	// 3 Private Subnets
-	for i := 4; i <= 6; i++ {
-		resourceTags["Name"] = fmt.Sprintf("%s-%s-%d", prefix, "pub-sub", i)
-		sub, err := ec2.NewSubnet(ctx, fmt.Sprintf("%s-%s-%d", prefix, "pub-sub", i), &ec2.SubnetArgs{
+	for i, s := range netConfig.PublicSubnets {
+		resourceTags["Name"] = s.Name
+		sub, err := ec2.NewSubnet(ctx, s.Name, &ec2.SubnetArgs{
 			VpcId:            vpc.ID(),
-			CidrBlock:        pulumi.String(fmt.Sprintf("10.0.%d.0/24", i)),
+			CidrBlock:        pulumi.String(s.Cidr),
 			AvailabilityZone: pulumi.String(availabilityZones[i%3]),
 			Tags:             pulumi.ToStringMap(resourceTags),
 		})
