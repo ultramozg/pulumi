@@ -6,12 +6,6 @@ import (
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
-		resourceTags := make(map[string]string)
-
-		resourceTags["CreatedBy"] = "pulumi-eks-go"
-		resourceTags["GitOrg"] = "gsweene2"
-		resourceTags["GitRepo"] = "pulumi"
-
 		netResources, err := setupNetwork(ctx)
 		if err != nil {
 			return err
