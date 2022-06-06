@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 )
@@ -53,7 +51,6 @@ func main() {
 		conf := config.New(ctx, "")
 		conf.RequireObject("network", &networkConfig)
 		conf.RequireObject("eks", &eksConfig)
-		fmt.Println(eksConfig)
 
 		netResources, err := setupNetwork(ctx, &networkConfig)
 		if err != nil {
