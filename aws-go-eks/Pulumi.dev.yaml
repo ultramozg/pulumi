@@ -15,5 +15,24 @@ config:
       cidr: 10.0.5.0/24
     - name: public-subnet-03
       cidr: 10.0.6.0/24
+  aws-go-eks:eks:
+    nodeGroup:
+      capacityType: SPOT
+      nodeType: t3.medium
+      scaling:
+        desire: 1
+        min: 1
+        max: 2
+    sg:
+      ingress:
+      - protocol: tcp
+        fromPort: 80
+        toPort: 80
+        cidr: 0.0.0.0/0
+      egress:
+      - protocol: "-1"
+        fromPort: 0
+        toPort: 0
+        cidr: 0.0.0.0/0
   aws:profile: my-admin-account
   aws:region: eu-west-1
