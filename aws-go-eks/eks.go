@@ -16,7 +16,7 @@ type eksResources struct {
 	eksCluster  *eks.Cluster
 }
 
-func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResources, error) {
+func setupEKS(ctx *pulumi.Context, netResources *networkResources, eksConfig *eksConfig) (*eksResources, error) {
 
 	// Resource: IAM Role
 	// Purpose: An IAM role is an IAM identity that you can create in your account that has specific permissions.
@@ -82,24 +82,32 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResource
 		}
 	}
 	// Create a Security Group that we can use to actually connect to our cluster
-	clusterSg, err := ec2.NewSecurityGroup(ctx, "cluster-sg", &ec2.SecurityGroupArgs{
-		VpcId: netResources.vpc.ID(),
-		Egress: ec2.SecurityGroupEgressArray{
-			ec2.SecurityGroupEgressArgs{
-				Protocol:   pulumi.String("-1"),
-				FromPort:   pulumi.Int(0),
-				ToPort:     pulumi.Int(0),
-				CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
-			},
-		},
-		Ingress: ec2.SecurityGroupIngressArray{
+	ingressRules := ec2.SecurityGroupIngressArray{}
+	for _, v := range eksConfig.Sg.Ingress {
+		ingressRules = append(ingressRules,
 			ec2.SecurityGroupIngressArgs{
-				Protocol:   pulumi.String("tcp"),
-				FromPort:   pulumi.Int(80),
-				ToPort:     pulumi.Int(80),
-				CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
+				Protocol:   pulumi.String(v.Protocol),
+				FromPort:   pulumi.Int(v.FromPort),
+				ToPort:     pulumi.Int(v.ToPort),
+				CidrBlocks: pulumi.StringArray{pulumi.String(v.Cidr)},
 			},
-		},
+		)
+	}
+	egressRules := ec2.SecurityGroupEgressArray{}
+	for _, v := range eksConfig.Sg.Egress {
+		egressRules = append(egressRules,
+			ec2.SecurityGroupEgressArgs{
+				Protocol:   pulumi.String(v.Protocol),
+				FromPort:   pulumi.Int(v.FromPort),
+				ToPort:     pulumi.Int(v.ToPort),
+				CidrBlocks: pulumi.StringArray{pulumi.String(v.Cidr)},
+			},
+		)
+	}
+	clusterSg, err := ec2.NewSecurityGroup(ctx, "cluster-sg", &ec2.SecurityGroupArgs{
+		VpcId:   netResources.vpc.ID(),
+		Ingress: ingressRules,
+		Egress:  egressRules,
 	})
 	if err != nil {
 		return nil, err
@@ -158,13 +166,13 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources) (*eksResource
 		ClusterName:   eksCluster.Name,
 		NodeGroupName: pulumi.String("demo-eks-nodegroup-2"),
 		NodeRoleArn:   pulumi.StringInput(nodeGroupRole.Arn),
-		InstanceTypes: pulumi.StringArray{pulumi.String("t3.medium")},
-		CapacityType:  pulumi.String("SPOT"),
+		InstanceTypes: pulumi.StringArray{pulumi.String(eksConfig.NodeGroup.NodeType)},
+		CapacityType:  pulumi.String(eksConfig.NodeGroup.CapacityType),
 		SubnetIds:     privSubnetsIDs,
 		ScalingConfig: &eks.NodeGroupScalingConfigArgs{
-			DesiredSize: pulumi.Int(1),
-			MaxSize:     pulumi.Int(2),
-			MinSize:     pulumi.Int(1),
+			DesiredSize: pulumi.Int(eksConfig.NodeGroup.Scaling.Desire),
+			MaxSize:     pulumi.Int(eksConfig.NodeGroup.Scaling.Max),
+			MinSize:     pulumi.Int(eksConfig.NodeGroup.Scaling.Min),
 		},
 		Tags: pulumi.StringMap{
 			fmt.Sprintf("k8s.io/cluster-autoscaler/%s", pulumi.StringInput(eksCluster.Name)): pulumi.String("owned"),
