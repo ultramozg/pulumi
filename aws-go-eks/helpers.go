@@ -87,3 +87,12 @@ func getThumbprint(oidc_issuer string) (string, error) {
 	// print out the fingerprint
 	return fmt.Sprintf("%x", sha1.Sum(root.Raw)), nil
 }
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
