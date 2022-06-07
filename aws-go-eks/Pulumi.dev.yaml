@@ -16,6 +16,10 @@ config:
     - name: public-subnet-03
       cidr: 10.0.6.0/24
   aws-go-eks:eks:
+    addons:
+    - clusterAutoscaller
+    - metricsServer
+    - loadBalancerController
     nodeGroup:
       capacityType: SPOT
       nodeType: t3.medium

@@ -18,6 +18,7 @@ type networkData struct {
 }
 
 type eksConfig struct {
+	Addons    []string
 	NodeGroup struct {
 		CapacityType string
 		NodeType     string
@@ -62,7 +63,7 @@ func main() {
 			return err
 		}
 
-		err = setupDeployments(ctx, eksResources)
+		err = setupDeployments(ctx, eksResources, &eksConfig)
 		if err != nil {
 			return err
 		}
