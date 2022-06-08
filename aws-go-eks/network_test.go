@@ -22,7 +22,7 @@ func (mocks) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
 func TestSetupNetwork(t *testing.T) {
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
 
-		_, err := setupNetwork(ctx, &networkData{"test-vpc", []subnetConfig{subnetConfig{"public", "192.168.0.0/24"}}, []subnetConfig{subnetConfig{"private", "192.168.1.1/24"}}})
+		_, err := setupNetwork(ctx, &networkData{"test-vpc", []subnetConfig{{"public", "192.168.0.0/24"}}, []subnetConfig{{"private", "192.168.1.1/24"}}})
 		assert.NoError(t, err)
 
 		/*
