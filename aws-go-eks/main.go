@@ -5,16 +5,15 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 )
 
+type subnetConfig struct {
+	Name string
+	Cidr string
+}
+
 type networkData struct {
-	Vpc           string
-	PublicSubnets []struct {
-		Name string
-		Cidr string
-	}
-	PrivateSubnets []struct {
-		Name string
-		Cidr string
-	}
+	Vpc            string
+	PublicSubnets  []subnetConfig
+	PrivateSubnets []subnetConfig
 }
 
 type eksConfig struct {
