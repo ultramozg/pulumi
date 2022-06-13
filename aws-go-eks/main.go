@@ -16,31 +16,34 @@ type networkData struct {
 	PrivateSubnets []subnetConfig
 }
 
+type Scaling struct {
+	Desire int
+	Min    int
+	Max    int
+}
+
+type NodeGroup struct {
+	CapacityType string
+	NodeType     string
+	Scaling      Scaling
+}
+
+type FirewallRule struct {
+	Protocol string
+	FromPort int
+	ToPort   int
+	Cidr     string
+}
+
+type Sg struct {
+	Ingress []FirewallRule
+	Egress  []FirewallRule
+}
+
 type eksConfig struct {
 	Addons    []string
-	NodeGroup struct {
-		CapacityType string
-		NodeType     string
-		Scaling      struct {
-			Desire int
-			Min    int
-			Max    int
-		}
-	}
-	Sg struct {
-		Ingress []struct {
-			Protocol string
-			FromPort int
-			ToPort   int
-			Cidr     string
-		}
-		Egress []struct {
-			Protocol string
-			FromPort int
-			ToPort   int
-			Cidr     string
-		}
-	}
+	NodeGroup NodeGroup
+	Sg        Sg
 }
 
 func main() {

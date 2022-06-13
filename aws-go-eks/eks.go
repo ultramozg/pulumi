@@ -17,6 +17,15 @@ type eksResources struct {
 }
 
 func setupEKS(ctx *pulumi.Context, netResources *networkResources, eksConfig *eksConfig) (*eksResources, error) {
+	prefix := "pulumi-eks-go"
+	resourceTags := make(map[string]string)
+
+	resourceTags["CreatedBy"] = "pulumi-eks-go"
+	resourceTags["GitOrg"] = "gsweene2"
+	resourceTags["GitRepo"] = "pulumi"
+
+	// VPC Args
+	resourceTags["Name"] = prefix + "-eks"
 
 	// Resource: IAM Role
 	// Purpose: An IAM role is an IAM identity that you can create in your account that has specific permissions.
@@ -135,6 +144,7 @@ func setupEKS(ctx *pulumi.Context, netResources *networkResources, eksConfig *ek
 			},
 			SubnetIds: append(privSubnetsIDs, pubSubnetsIDs...),
 		},
+		Tags: pulumi.ToStringMap(resourceTags),
 	})
 	if err != nil {
 		return nil, err
