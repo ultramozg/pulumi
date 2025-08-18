@@ -21,8 +21,8 @@ with Diagram("Multi region workload", show=False):
             lb >> eks
 
     with Cluster("Workload Account"):
+        workload_acc = OrganizationsAccount("Workload account")
         with Cluster("us-east-1"):
-            workload_acc = OrganizationsAccount("Worklaod account")
             tgw_attachment_workload_region_1 = TransitGatewayAttachment("Transit Gateway Attachment")
             vpc_workload_region_1 = VPC("VPC")  
             with Cluster("Public Subnet"):
@@ -31,7 +31,6 @@ with Diagram("Multi region workload", show=False):
                 db = RDS("Aurora Global Database")
                 lb >> eks >> db
         with Cluster("us-west-2"):
-            workload_acc = OrganizationsAccount("Worklaod account")
             tgw_attachment_workload_region_2 = TransitGatewayAttachment("Transit Gateway Attachment")
             vpc_workload_region_2 = VPC("VPC")  
             with Cluster("Public Subnet"):
