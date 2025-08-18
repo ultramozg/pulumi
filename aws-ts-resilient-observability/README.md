@@ -45,6 +45,17 @@ All components are provisioned via Pulumi and Helm.
 
 ---
 
+## Workload Stack
+
+Deployed into the workloads EKS clusters across 2 regions:
+
+- `Strimzi + Mirror Maker 2.0`: Kafka cluster deployed across 2 regions with 2 side replication
+- `Mircoservice architecture`: With tracing enabled
+
+All components are provisioned via Pulumi and Helm.
+
+---
+
 ## 🌐 Disaster Recovery Strategy
 
 This project implements the **Multi-Site DR** model:
