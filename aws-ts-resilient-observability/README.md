@@ -47,7 +47,7 @@ All components are provisioned via Pulumi and Helm.
 
 ## 🌐 Disaster Recovery Strategy
 
-This project implements the **Pilot-Light DR** model:
+This project implements the **Multi-Site DR** model:
 
 | DR Feature           | Implementation                                                |
 |----------------------|---------------------------------------------------------------|
