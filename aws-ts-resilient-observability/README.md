@@ -9,7 +9,7 @@ This project deploys a production-grade observability stack using Pulumi and AWS
 - Use **Pulumi (TypeScript)** to manage all infrastructure as code.
 - Build a reusable base for **multi-account, multi-region** architecture with **Transit Gateway + IPAM**.
 - Implement **Multi-Site approach** strategy using AWS-native tools like Route 53 and Global Databases.
-
+- Learn new IaC tools for such scenario
 ---
 
 ## Architecture Overview
