@@ -3,6 +3,13 @@
 This project deploys a production-grade observability stack using Pulumi and AWS EKS with a foundation for disaster recovery (DR multi site approach) across multiple AWS regions. The goal is to create a scalable, resilient, and automation-friendly monitoring system that enables zero-ops observability and serves as the backbone for future multi-region cell-based architecture.
 ---
 
+## Architecture Diagram
+
+This is high overview diagram, later on it maybe will be updated.
+
+![Observability Platform Architecture](diagrams/Infra.png)
+---
+
 ## Project Goals
 
 - Deploy a full observability stack (Cortex, Grafana, Loki) in a centralized **shared AWS account**.
