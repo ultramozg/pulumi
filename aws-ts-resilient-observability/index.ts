@@ -1,8 +1,13 @@
-import { TransitGateway } from "./components/transitGateway";
+import * as automation from "@pulumi/pulumi/automation";
 
-// Create a reusable Transit Gateway component
-const transitGateway = new TransitGateway("main-transit-gateway", {
-	description: "Main Transit Gateway for multi-account connectivity",
-	amazonSideAsn: 64512,
-	tags: { Name: "main-transit-gateway" },
-});
+async function upStack(stackName: string, workDir: string) {
+    const stack = await automation.LocalWorkspace.createOrSelectStack({ stackName, workDir });
+    await stack.up();
+}
+
+async function main() {
+    await upStack("shared-services", "./shared-services");
+    await upStack("workloads", "./workloads");
+}
+
+main();
