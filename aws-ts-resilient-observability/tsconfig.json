@@ -10,9 +10,21 @@
         "pretty": true,
         "noFallthroughCasesInSwitch": true,
         "noImplicitReturns": true,
-        "forceConsistentCasingInFileNames": true
+        "forceConsistentCasingInFileNames": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true
     },
-    "files": [
-        "index.ts"
+    "include": [
+        "index.ts",
+        "components/**/*",
+        "automation/**/*",
+        "policies/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "bin",
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "tests/**/*"
     ]
 }
