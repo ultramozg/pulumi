@@ -1,0 +1,4 @@
+name: aws-infrastructure-governance
+runtime: nodejs
+description: AWS infrastructure governance policies combining AWS Guard with custom organization rules
+main: index.ts

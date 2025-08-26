@@ -1,0 +1,9 @@
+{
+    "name": "aws-infrastructure-governance",
+    "version": "1.0.0",
+    "description": "AWS infrastructure governance policies combining AWS Guard with custom organization rules",
+    "main": "index.ts",
+    "dependencies": {
+        "@pulumi/policy": "^1.10.0"
+    }
+}
