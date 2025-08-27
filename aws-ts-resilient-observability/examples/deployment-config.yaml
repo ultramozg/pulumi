@@ -1,0 +1,208 @@
+name: "aws-infrastructure-deployment"
+defaultRegion: "us-east-1"
+defaultTags:
+  Environment: "production"
+  Project: "aws-infrastructure-components"
+  ManagedBy: "pulumi-automation"
+
+stacks:
+  # Networking foundation stack
+  - name: "networking"
+    workDir: "./shared-services"
+    components:
+      - type: "ipam"
+        name: "central-ipam"
+        config:
+          cidrBlocks:
+            - "10.0.0.0/8"
+            - "172.16.0.0/12"
+          shareWithOrganization: true
+          operatingRegions:
+            - "us-east-1"
+            - "us-west-2"
+      - type: "transit-gateway"
+        name: "central-tgw"
+        config:
+          description: "Central Transit Gateway for organization"
+          amazonSideAsn: 64512
+    tags:
+      Layer: "networking"
+
+  # VPC stacks that depend on networking
+  - name: "vpc-east"
+    workDir: "./workloads"
+    dependencies: ["networking"]
+    components:
+      - type: "vpc"
+        name: "production-vpc-east"
+        region: "us-east-1"
+        config:
+          ipamPoolArn: "${networking.ipam.poolArn}"
+          transitGatewayArn: "${networking.transit-gateway.arn}"
+          internetGatewayEnabled: true
+          natGatewayEnabled: true
+          availabilityZoneCount: 3
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 24
+            private:
+              type: "private"
+              cidrPrefix: 22
+            transit:
+              type: "transit-gateway"
+              cidrPrefix: 28
+    tags:
+      Layer: "networking"
+      Region: "us-east-1"
+
+  - name: "vpc-west"
+    workDir: "./workloads"
+    dependencies: ["networking"]
+    components:
+      - type: "vpc"
+        name: "production-vpc-west"
+        region: "us-west-2"
+        config:
+          ipamPoolArn: "${networking.ipam.poolArn}"
+          transitGatewayArn: "${networking.transit-gateway.arn}"
+          internetGatewayEnabled: true
+          natGatewayEnabled: true
+          availabilityZoneCount: 3
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 24
+            private:
+              type: "private"
+              cidrPrefix: 22
+            transit:
+              type: "transit-gateway"
+              cidrPrefix: 28
+    tags:
+      Layer: "networking"
+      Region: "us-west-2"
+
+  # Container registry stack
+  - name: "container-registry"
+    workDir: "./shared-services"
+    components:
+      - type: "ecr"
+        name: "application-registry"
+        config:
+          repositories:
+            - name: "web-app"
+              shareWithOrganization: true
+            - name: "api-service"
+              shareWithOrganization: true
+            - name: "worker-service"
+              shareWithOrganization: false
+          replicationEnabled: true
+          sourceRegion: "us-east-1"
+          destinationRegion: "us-west-2"
+    tags:
+      Layer: "container-registry"
+
+  # DNS and certificates stack
+  - name: "dns-certificates"
+    workDir: "./shared-services"
+    components:
+      - type: "route53"
+        name: "primary-dns"
+        config:
+          hostedZones:
+            - name: "example.com"
+              private: false
+            - name: "internal.example.com"
+              private: true
+              vpcIds: ["${vpc-east.vpc.id}", "${vpc-west.vpc.id}"]
+      - type: "acm"
+        name: "ssl-certificates"
+        config:
+          certificates:
+            - domainName: "*.example.com"
+              subjectAlternativeNames:
+                - "example.com"
+              validationMethod: "DNS"
+              hostedZoneId: "${dns-certificates.route53.hostedZoneId}"
+          region: "us-east-1"
+    tags:
+      Layer: "dns-certificates"
+
+  # Database stack
+  - name: "database"
+    workDir: "./workloads"
+    dependencies: ["vpc-east", "vpc-west"]
+    components:
+      - type: "rds"
+        name: "global-database"
+        config:
+          globalClusterIdentifier: "production-global-db"
+          engine: "aurora-postgresql"
+          regions:
+            - region: "us-east-1"
+              isPrimary: true
+              subnetIds: ["${vpc-east.vpc.privateSubnetIds}"]
+              createSecurityGroup: true
+              securityGroupRules:
+                - type: "ingress"
+                  fromPort: 5432
+                  toPort: 5432
+                  protocol: "tcp"
+                  cidrBlocks: ["10.0.0.0/8"]
+            - region: "us-west-2"
+              isPrimary: false
+              subnetIds: ["${vpc-west.vpc.privateSubnetIds}"]
+              createSecurityGroup: true
+              securityGroupRules:
+                - type: "ingress"
+                  fromPort: 5432
+                  toPort: 5432
+                  protocol: "tcp"
+                  cidrBlocks: ["10.0.0.0/8"]
+    tags:
+      Layer: "database"
+
+  # Kubernetes clusters stack
+  - name: "kubernetes"
+    workDir: "./workloads"
+    dependencies: ["vpc-east", "vpc-west", "container-registry"]
+    components:
+      - type: "eks"
+        name: "production-eks-east"
+        region: "us-east-1"
+        config:
+          clusterName: "production-east"
+          autoModeEnabled: true
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            - "aws-load-balancer-controller"
+          nodeGroups:
+            - name: "general"
+              instanceTypes: ["m5.large", "m5.xlarge"]
+              scalingConfig:
+                minSize: 2
+                maxSize: 10
+                desiredSize: 3
+      - type: "eks"
+        name: "production-eks-west"
+        region: "us-west-2"
+        config:
+          clusterName: "production-west"
+          autoModeEnabled: true
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            - "aws-load-balancer-controller"
+          nodeGroups:
+            - name: "general"
+              instanceTypes: ["m5.large", "m5.xlarge"]
+              scalingConfig:
+                minSize: 2
+                maxSize: 10
+                desiredSize: 3
+    tags:
+      Layer: "kubernetes"

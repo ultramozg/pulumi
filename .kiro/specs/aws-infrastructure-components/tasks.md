@@ -70,7 +70,7 @@
   - Write unit tests in aws-ts-resilient-observability/components/eks/eks.test.ts
   - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5_
 
-- [ ] 10. Enhance automation API for multi-stack deployment
+- [x] 10. Enhance automation API for multi-stack deployment
   - Extend existing aws-ts-resilient-observability/index.ts automation API to support component-specific stacks
   - Implement dependency resolution for inter-stack dependencies in aws-ts-resilient-observability/automation/
   - Add configuration management for deployment specifications
