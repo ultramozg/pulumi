@@ -7,8 +7,7 @@ module.exports = {
     '**/?(*.)+(spec|test).ts'
   ],
   testPathIgnorePatterns: [
-    '/node_modules/',
-    'tests/unit/deployment-error-handling.test.ts'
+    '/node_modules/'
   ],
   transform: {
     '^.+\\.ts$': 'ts-jest',
