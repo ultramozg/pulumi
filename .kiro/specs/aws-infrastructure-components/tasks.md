@@ -14,7 +14,7 @@
   - Write unit tests for policy validation in aws-ts-resilient-observability/tests/unit/
   - _Requirements: 3.1, 3.2, 3.3_
 
-- [ ] 3. Create ECR component with cross-region replication
+- [x] 3. Create ECR component with cross-region replication
   - Research existing Pulumi ECR packages and evaluate suitability
   - Implement ECR component class in aws-ts-resilient-observability/components/ecr/index.ts
   - Add cross-region replication functionality between us-east-1 and us-west-2
