@@ -1,0 +1,209 @@
+name: "development-environment"
+description: "Cost-optimized development environment with minimal resources"
+defaultRegion: "us-east-1"
+defaultTags:
+  Environment: "development"
+  Project: "dev-environment"
+  ManagedBy: "pulumi-automation"
+  Owner: "development-team"
+  CostOptimized: "true"
+
+# Configuration parameters
+parameters:
+  environment: "development"
+  region: "us-east-1"
+  domainName: "dev.example.com"
+
+stacks:
+  # Simple networking stack
+  - name: "networking"
+    workDir: "./shared-services"
+    description: "Basic VPC for development workloads"
+    components:
+      - type: "vpc"
+        name: "dev-vpc"
+        config:
+          region: "${parameters.region}"
+          cidrBlock: "10.100.0.0/16"
+          internetGatewayEnabled: true
+          natGatewayEnabled: false  # Cost optimization - no NAT Gateway
+          availabilityZoneCount: 2
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 8
+              availabilityZones: ["${parameters.region}a", "${parameters.region}b"]
+            private:
+              type: "private"
+              cidrPrefix: 8
+              availabilityZones: ["${parameters.region}a", "${parameters.region}b"]
+    tags:
+      Layer: "networking"
+      CostOptimized: "true"
+
+  # Development container registry
+  - name: "container-registry"
+    workDir: "./shared-services"
+    description: "ECR repositories for development images"
+    components:
+      - type: "ecr"
+        name: "dev-registry"
+        config:
+          repositories:
+            - name: "dev-app"
+              shareWithOrganization: false
+              lifecyclePolicy: |
+                {
+                  "rules": [{
+                    "rulePriority": 1,
+                    "description": "Keep last 5 images only",
+                    "selection": {
+                      "tagStatus": "any",
+                      "countType": "imageCountMoreThan",
+                      "countNumber": 5
+                    },
+                    "action": {"type": "expire"}
+                  }]
+                }
+            - name: "dev-api"
+              shareWithOrganization: false
+              lifecyclePolicy: |
+                {
+                  "rules": [{
+                    "rulePriority": 1,
+                    "description": "Keep last 3 images only",
+                    "selection": {
+                      "tagStatus": "any",
+                      "countType": "imageCountMoreThan",
+                      "countNumber": 3
+                    },
+                    "action": {"type": "expire"}
+                  }]
+                }
+          replicationEnabled: false  # No replication for dev
+          sourceRegion: "${parameters.region}"
+          destinationRegion: "${parameters.region}"
+    tags:
+      Layer: "container-registry"
+      CostOptimized: "true"
+
+  # Development DNS (optional)
+  - name: "dns"
+    workDir: "./shared-services"
+    description: "DNS for development environment"
+    components:
+      - type: "route53"
+        name: "dev-dns"
+        config:
+          hostedZones:
+            - name: "${parameters.domainName}"
+              comment: "Development environment DNS"
+              forceDestroy: true  # Allow easy cleanup
+          records:
+            - zoneName: "${parameters.domainName}"
+              name: "app"
+              type: "A"
+              values: ["192.0.2.100"]
+              ttl: 60  # Short TTL for development
+            - zoneName: "${parameters.domainName}"
+              name: "api"
+              type: "A"
+              values: ["192.0.2.101"]
+              ttl: 60
+          region: "${parameters.region}"
+    tags:
+      Layer: "dns"
+      CostOptimized: "true"
+
+  # Minimal Kubernetes cluster
+  - name: "kubernetes"
+    workDir: "./workloads"
+    dependencies: ["networking", "container-registry"]
+    description: "Cost-optimized EKS cluster for development"
+    components:
+      - type: "eks"
+        name: "dev-cluster"
+        config:
+          clusterName: "dev-cluster"
+          version: "1.31"
+          region: "${parameters.region}"
+          subnetIds: "${networking.vpc.publicSubnets}"  # Use public subnets (no NAT Gateway)
+          endpointConfig:
+            privateAccess: false
+            publicAccess: true
+            publicAccessCidrs: ["0.0.0.0/0"]
+          enableCloudWatchLogging: false  # Cost optimization
+          nodeGroups:
+            - name: "dev-nodes"
+              instanceTypes: ["t3.small", "t3.medium"]  # Small instances
+              scalingConfig:
+                minSize: 1
+                maxSize: 3
+                desiredSize: 1
+              diskSize: 20  # Minimal disk size
+              capacityType: "SPOT"  # Use spot instances for cost savings
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            # Minimal addons for cost optimization
+    tags:
+      Layer: "kubernetes"
+      CostOptimized: "true"
+
+# Deployment options optimized for development
+deploymentOptions:
+  parallelDeployment: true
+  refreshBeforeDeployment: false
+  continueOnError: true  # Continue on non-critical errors
+  maxConcurrency: 2
+
+# Development-specific post-deployment actions
+postDeployment:
+  - action: "output"
+    description: "Display development environment outputs"
+    outputs:
+      - "networking.vpc.id"
+      - "container-registry.ecr.repositoryUrls"
+      - "dns.route53.nameServers"
+      - "kubernetes.eks.clusterEndpoint"
+
+  - action: "info"
+    description: "Development environment information"
+    message: |
+      Development environment deployed successfully!
+      
+      Cost optimization features enabled:
+      - No NAT Gateway (using public subnets for EKS)
+      - Spot instances for cost savings
+      - Minimal CloudWatch logging
+      - Short image retention policies
+      - Small instance types
+      
+      Access your cluster with:
+      aws eks update-kubeconfig --region ${parameters.region} --name dev-cluster
+      
+      Remember to destroy resources when not in use to minimize costs:
+      pulumi destroy
+
+  - action: "validate"
+    description: "Basic validation for development environment"
+    checks:
+      - type: "kubernetes"
+        target: "${kubernetes.eks.clusterEndpoint}"
+        expected: "cluster-ready"
+        timeout: "5m"  # Shorter timeout for dev
+
+# Development environment cleanup schedule (optional)
+cleanup:
+  schedule: "0 22 * * 1-5"  # Cleanup at 10 PM on weekdays
+  actions:
+    - "stop-non-essential-services"
+    - "scale-down-clusters"
+  
+# Resource limits for cost control
+resourceLimits:
+  maxInstances: 5
+  maxStorage: "100Gi"
+  maxCPU: "10"
+  maxMemory: "20Gi"

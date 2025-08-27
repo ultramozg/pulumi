@@ -1,0 +1,162 @@
+name: "simple-web-app-deployment"
+description: "Simple web application with VPC, ECR, DNS, certificates, and EKS"
+defaultRegion: "us-east-1"
+defaultTags:
+  Environment: "production"
+  Project: "simple-web-app"
+  ManagedBy: "pulumi-automation"
+  Owner: "development-team"
+
+# Configuration parameters
+parameters:
+  domainName: "myapp.example.com"
+  environment: "production"
+  region: "us-east-1"
+
+stacks:
+  # Networking stack
+  - name: "networking"
+    workDir: "./shared-services"
+    description: "VPC and networking infrastructure"
+    components:
+      - type: "vpc"
+        name: "app-vpc"
+        config:
+          region: "${parameters.region}"
+          cidrBlock: "10.0.0.0/16"
+          internetGatewayEnabled: true
+          natGatewayEnabled: true
+          availabilityZoneCount: 2
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 8
+              availabilityZones: ["${parameters.region}a", "${parameters.region}b"]
+            private:
+              type: "private"
+              cidrPrefix: 8
+              availabilityZones: ["${parameters.region}a", "${parameters.region}b"]
+    tags:
+      Layer: "networking"
+
+  # Container registry stack
+  - name: "container-registry"
+    workDir: "./shared-services"
+    description: "ECR repository for application images"
+    components:
+      - type: "ecr"
+        name: "app-registry"
+        config:
+          repositories:
+            - name: "web-app"
+              shareWithOrganization: false
+              lifecyclePolicy: |
+                {
+                  "rules": [{
+                    "rulePriority": 1,
+                    "description": "Keep last 10 images",
+                    "selection": {
+                      "tagStatus": "any",
+                      "countType": "imageCountMoreThan",
+                      "countNumber": 10
+                    },
+                    "action": {"type": "expire"}
+                  }]
+                }
+          replicationEnabled: false
+          sourceRegion: "${parameters.region}"
+          destinationRegion: "${parameters.region}"
+    tags:
+      Layer: "container-registry"
+
+  # DNS and certificates stack
+  - name: "dns-certificates"
+    workDir: "./shared-services"
+    description: "DNS hosted zone and SSL certificates"
+    components:
+      - type: "route53"
+        name: "app-dns"
+        config:
+          hostedZones:
+            - name: "${parameters.domainName}"
+              comment: "DNS zone for web application"
+          records:
+            - zoneName: "${parameters.domainName}"
+              name: "www"
+              type: "A"
+              values: ["192.0.2.1"]
+              ttl: 300
+          region: "${parameters.region}"
+      - type: "acm"
+        name: "app-certificate"
+        config:
+          region: "${parameters.region}"
+          certificates:
+            - domainName: "*.${parameters.domainName}"
+              subjectAlternativeNames: ["${parameters.domainName}"]
+              validationMethod: "DNS"
+              hostedZoneId: "${dns-certificates.route53.hostedZoneId}"
+    tags:
+      Layer: "dns-certificates"
+
+  # Kubernetes cluster stack
+  - name: "kubernetes"
+    workDir: "./workloads"
+    dependencies: ["networking", "container-registry", "dns-certificates"]
+    description: "EKS cluster for running the web application"
+    components:
+      - type: "eks"
+        name: "app-cluster"
+        config:
+          clusterName: "${parameters.environment}-web-app"
+          version: "1.31"
+          region: "${parameters.region}"
+          subnetIds: "${networking.vpc.privateSubnets}"
+          endpointConfig:
+            privateAccess: true
+            publicAccess: true
+            publicAccessCidrs: ["0.0.0.0/0"]
+          enableCloudWatchLogging: true
+          logTypes: ["api", "audit"]
+          nodeGroups:
+            - name: "app-nodes"
+              instanceTypes: ["t3.medium"]
+              scalingConfig:
+                minSize: 2
+                maxSize: 6
+                desiredSize: 2
+              diskSize: 50
+              capacityType: "ON_DEMAND"
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            - "aws-load-balancer-controller"
+    tags:
+      Layer: "kubernetes"
+
+# Deployment options
+deploymentOptions:
+  parallelDeployment: true
+  refreshBeforeDeployment: false
+  continueOnError: false
+  
+# Post-deployment actions
+postDeployment:
+  - action: "output"
+    description: "Display important outputs"
+    outputs:
+      - "networking.vpc.id"
+      - "container-registry.ecr.repositoryUrl"
+      - "dns-certificates.route53.nameServers"
+      - "kubernetes.eks.clusterEndpoint"
+  
+  - action: "validate"
+    description: "Validate deployment"
+    checks:
+      - type: "dns"
+        target: "${parameters.domainName}"
+        expected: "nameservers-configured"
+      - type: "kubernetes"
+        target: "${kubernetes.eks.clusterEndpoint}"
+        expected: "cluster-ready"

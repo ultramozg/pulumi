@@ -1,0 +1,387 @@
+name: "microservices-platform-deployment"
+description: "Comprehensive microservices platform with multi-region support"
+defaultRegion: "us-east-1"
+defaultTags:
+  Environment: "production"
+  Project: "microservices-platform"
+  ManagedBy: "pulumi-automation"
+  Owner: "platform-team"
+
+# Configuration parameters
+parameters:
+  platformName: "microservices-platform"
+  environment: "production"
+  primaryRegion: "us-east-1"
+  secondaryRegion: "us-west-2"
+  domainName: "platform.company.com"
+
+stacks:
+  # IPAM foundation stack
+  - name: "ipam"
+    workDir: "./shared-services"
+    description: "Centralized IP address management"
+    components:
+      - type: "ipam"
+        name: "platform-ipam"
+        config:
+          cidrBlocks:
+            - "10.0.0.0/8"
+            - "172.16.0.0/12"
+          shareWithOrganization: true
+          operatingRegions:
+            - "${parameters.primaryRegion}"
+            - "${parameters.secondaryRegion}"
+    tags:
+      Layer: "foundation"
+
+  # Primary region networking
+  - name: "networking-primary"
+    workDir: "./shared-services"
+    dependencies: ["ipam"]
+    description: "Primary region VPC and networking"
+    components:
+      - type: "vpc"
+        name: "primary-platform-vpc"
+        config:
+          region: "${parameters.primaryRegion}"
+          ipamPoolArn: "${ipam.ipam.poolArns.${parameters.primaryRegion}}"
+          internetGatewayEnabled: true
+          natGatewayEnabled: true
+          availabilityZoneCount: 3
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 8
+              availabilityZones:
+                - "${parameters.primaryRegion}a"
+                - "${parameters.primaryRegion}b"
+                - "${parameters.primaryRegion}c"
+            private:
+              type: "private"
+              cidrPrefix: 6
+              availabilityZones:
+                - "${parameters.primaryRegion}a"
+                - "${parameters.primaryRegion}b"
+                - "${parameters.primaryRegion}c"
+            database:
+              type: "private"
+              cidrPrefix: 8
+              availabilityZones:
+                - "${parameters.primaryRegion}a"
+                - "${parameters.primaryRegion}b"
+                - "${parameters.primaryRegion}c"
+    tags:
+      Layer: "networking"
+      Region: "${parameters.primaryRegion}"
+
+  # Secondary region networking
+  - name: "networking-secondary"
+    workDir: "./shared-services"
+    dependencies: ["ipam"]
+    description: "Secondary region VPC and networking"
+    components:
+      - type: "vpc"
+        name: "secondary-platform-vpc"
+        config:
+          region: "${parameters.secondaryRegion}"
+          ipamPoolArn: "${ipam.ipam.poolArns.${parameters.secondaryRegion}}"
+          internetGatewayEnabled: true
+          natGatewayEnabled: true
+          availabilityZoneCount: 3
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 8
+              availabilityZones:
+                - "${parameters.secondaryRegion}a"
+                - "${parameters.secondaryRegion}b"
+                - "${parameters.secondaryRegion}c"
+            private:
+              type: "private"
+              cidrPrefix: 6
+              availabilityZones:
+                - "${parameters.secondaryRegion}a"
+                - "${parameters.secondaryRegion}b"
+                - "${parameters.secondaryRegion}c"
+            database:
+              type: "private"
+              cidrPrefix: 8
+              availabilityZones:
+                - "${parameters.secondaryRegion}a"
+                - "${parameters.secondaryRegion}b"
+                - "${parameters.secondaryRegion}c"
+    tags:
+      Layer: "networking"
+      Region: "${parameters.secondaryRegion}"
+
+  # Container registry stack
+  - name: "container-registry"
+    workDir: "./shared-services"
+    description: "Shared container registry for all microservices"
+    components:
+      - type: "ecr"
+        name: "microservices-registry"
+        config:
+          repositories:
+            - name: "api-gateway"
+              shareWithOrganization: true
+              lifecyclePolicy: |
+                {
+                  "rules": [{
+                    "rulePriority": 1,
+                    "description": "Keep last 30 production images",
+                    "selection": {
+                      "tagStatus": "tagged",
+                      "tagPrefixList": ["v", "release"],
+                      "countType": "imageCountMoreThan",
+                      "countNumber": 30
+                    },
+                    "action": {"type": "expire"}
+                  }]
+                }
+            - name: "user-service"
+              shareWithOrganization: true
+            - name: "order-service"
+              shareWithOrganization: true
+            - name: "payment-service"
+              shareWithOrganization: true
+            - name: "notification-service"
+              shareWithOrganization: true
+            - name: "analytics-service"
+              shareWithOrganization: true
+          replicationEnabled: true
+          sourceRegion: "${parameters.primaryRegion}"
+          destinationRegion: "${parameters.secondaryRegion}"
+    tags:
+      Layer: "container-registry"
+
+  # DNS and service discovery
+  - name: "dns-service-discovery"
+    workDir: "./shared-services"
+    dependencies: ["networking-primary", "networking-secondary"]
+    description: "DNS infrastructure and service discovery"
+    components:
+      - type: "route53"
+        name: "platform-dns"
+        config:
+          hostedZones:
+            - name: "${parameters.domainName}"
+              comment: "Public API domain for microservices platform"
+            - name: "api.${parameters.domainName}"
+              comment: "API services subdomain"
+            - name: "internal.${parameters.domainName}"
+              private: true
+              vpcIds:
+                - "${networking-primary.vpc.id}"
+                - "${networking-secondary.vpc.id}"
+              comment: "Internal service discovery domain"
+          records:
+            - zoneName: "${parameters.domainName}"
+              name: "api"
+              type: "A"
+              values: ["192.0.2.100"]
+              ttl: 300
+            - zoneName: "internal.${parameters.domainName}"
+              name: "user-service"
+              type: "A"
+              values: ["10.0.1.100"]
+              ttl: 60
+          region: "${parameters.primaryRegion}"
+      - type: "acm"
+        name: "platform-certificates"
+        config:
+          region: "${parameters.primaryRegion}"
+          certificates:
+            - domainName: "*.${parameters.domainName}"
+              subjectAlternativeNames: ["${parameters.domainName}"]
+              validationMethod: "DNS"
+              hostedZoneId: "${dns-service-discovery.route53.hostedZoneIds.${parameters.domainName}}"
+            - domainName: "*.api.${parameters.domainName}"
+              subjectAlternativeNames: ["api.${parameters.domainName}"]
+              validationMethod: "DNS"
+              hostedZoneId: "${dns-service-discovery.route53.hostedZoneIds.api.${parameters.domainName}}"
+    tags:
+      Layer: "dns-certificates"
+
+  # Global database
+  - name: "database"
+    workDir: "./workloads"
+    dependencies: ["networking-primary", "networking-secondary"]
+    description: "Global database with multi-region support"
+    components:
+      - type: "rds"
+        name: "platform-database"
+        config:
+          globalClusterIdentifier: "${parameters.platformName}-global-db"
+          engine: "aurora-postgresql"
+          engineVersion: "15.4"
+          databaseName: "platformdb"
+          masterUsername: "platformadmin"
+          masterPassword: "SecurePlatformPassword123!"
+          regions:
+            - region: "${parameters.primaryRegion}"
+              isPrimary: true
+              subnetIds: "${networking-primary.vpc.databaseSubnets}"
+              createSecurityGroup: true
+              securityGroupRules:
+                - type: "ingress"
+                  fromPort: 5432
+                  toPort: 5432
+                  protocol: "tcp"
+                  cidrBlocks: ["${networking-primary.vpc.cidrBlock}"]
+                  description: "PostgreSQL access from primary VPC"
+              instanceClass: "db.r6g.xlarge"
+              instanceCount: 2
+            - region: "${parameters.secondaryRegion}"
+              isPrimary: false
+              subnetIds: "${networking-secondary.vpc.databaseSubnets}"
+              createSecurityGroup: true
+              securityGroupRules:
+                - type: "ingress"
+                  fromPort: 5432
+                  toPort: 5432
+                  protocol: "tcp"
+                  cidrBlocks: ["${networking-secondary.vpc.cidrBlock}"]
+                  description: "PostgreSQL access from secondary VPC"
+              instanceClass: "db.r6g.large"
+              instanceCount: 1
+          backupRetentionPeriod: 30
+          deletionProtection: true
+          storageEncrypted: true
+    tags:
+      Layer: "database"
+
+  # Primary Kubernetes cluster
+  - name: "kubernetes-primary"
+    workDir: "./workloads"
+    dependencies: ["networking-primary", "container-registry"]
+    description: "Primary region EKS cluster for microservices"
+    components:
+      - type: "eks"
+        name: "primary-microservices-cluster"
+        config:
+          clusterName: "${parameters.platformName}-primary"
+          version: "1.31"
+          region: "${parameters.primaryRegion}"
+          subnetIds: "${networking-primary.vpc.privateSubnets}"
+          endpointConfig:
+            privateAccess: true
+            publicAccess: true
+            publicAccessCidrs: ["10.0.0.0/8"]
+          enableCloudWatchLogging: true
+          logTypes: ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+          nodeGroups:
+            - name: "system-services"
+              instanceTypes: ["t3.medium"]
+              scalingConfig:
+                minSize: 3
+                maxSize: 6
+                desiredSize: 3
+              diskSize: 50
+              capacityType: "ON_DEMAND"
+            - name: "microservices"
+              instanceTypes: ["m5.large", "m5.xlarge", "c5.large"]
+              scalingConfig:
+                minSize: 5
+                maxSize: 50
+                desiredSize: 10
+              diskSize: 100
+              capacityType: "SPOT"
+            - name: "data-services"
+              instanceTypes: ["r5.large", "r5.xlarge"]
+              scalingConfig:
+                minSize: 2
+                maxSize: 10
+                desiredSize: 3
+              diskSize: 200
+              capacityType: "ON_DEMAND"
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            - "aws-ebs-csi-driver"
+            - "aws-load-balancer-controller"
+            - "aws-efs-csi-driver"
+    tags:
+      Layer: "kubernetes"
+      Region: "${parameters.primaryRegion}"
+
+  # Secondary Kubernetes cluster
+  - name: "kubernetes-secondary"
+    workDir: "./workloads"
+    dependencies: ["networking-secondary", "container-registry"]
+    description: "Secondary region EKS cluster for microservices"
+    components:
+      - type: "eks"
+        name: "secondary-microservices-cluster"
+        config:
+          clusterName: "${parameters.platformName}-secondary"
+          version: "1.31"
+          region: "${parameters.secondaryRegion}"
+          subnetIds: "${networking-secondary.vpc.privateSubnets}"
+          endpointConfig:
+            privateAccess: true
+            publicAccess: true
+            publicAccessCidrs: ["10.0.0.0/8"]
+          enableCloudWatchLogging: true
+          nodeGroups:
+            - name: "system-services"
+              instanceTypes: ["t3.medium"]
+              scalingConfig:
+                minSize: 2
+                maxSize: 4
+                desiredSize: 2
+              capacityType: "ON_DEMAND"
+            - name: "microservices"
+              instanceTypes: ["m5.large", "c5.large"]
+              scalingConfig:
+                minSize: 3
+                maxSize: 20
+                desiredSize: 5
+              capacityType: "SPOT"
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            - "aws-ebs-csi-driver"
+            - "aws-load-balancer-controller"
+    tags:
+      Layer: "kubernetes"
+      Region: "${parameters.secondaryRegion}"
+
+# Deployment options
+deploymentOptions:
+  parallelDeployment: true
+  refreshBeforeDeployment: true
+  continueOnError: false
+  maxConcurrency: 3
+
+# Post-deployment actions
+postDeployment:
+  - action: "output"
+    description: "Display platform outputs"
+    outputs:
+      - "ipam.ipam.id"
+      - "networking-primary.vpc.id"
+      - "networking-secondary.vpc.id"
+      - "container-registry.ecr.repositoryUrls"
+      - "dns-service-discovery.route53.nameServers"
+      - "database.rds.primaryEndpoint"
+      - "kubernetes-primary.eks.clusterEndpoint"
+      - "kubernetes-secondary.eks.clusterEndpoint"
+
+  - action: "validate"
+    description: "Validate platform deployment"
+    checks:
+      - type: "networking"
+        target: "cross-region-connectivity"
+        expected: "connected"
+      - type: "database"
+        target: "${database.rds.primaryEndpoint}"
+        expected: "accessible"
+      - type: "kubernetes"
+        target: "${kubernetes-primary.eks.clusterEndpoint}"
+        expected: "cluster-ready"
+      - type: "kubernetes"
+        target: "${kubernetes-secondary.eks.clusterEndpoint}"
+        expected: "cluster-ready"
