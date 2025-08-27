@@ -10,7 +10,7 @@ export * from "./interfaces";
 // Individual components will be exported here as they are implemented
 export * from "./ecr";
 export * from "./ipam";
-// export * from "./vpc";
+export * from "./vpc";
 // export * from "./route53";
 // export * from "./acm";
 // export * from "./rds";

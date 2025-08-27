@@ -22,7 +22,10 @@ export interface SecurityGroupRule {
  */
 export interface SubnetSpec {
     type: 'public' | 'private' | 'transit-gateway';
-    cidrPrefix: number; // Number of host bits
+    /** Subnet prefix length (e.g., 24 for /24) */
+    subnetPrefix: number;
+    /** Number of host bits (deprecated, use subnetPrefix instead) */
+    cidrPrefix?: number;
     availabilityZones: string[];
 }
 

@@ -29,7 +29,7 @@
   - Write unit tests in aws-ts-resilient-observability/components/ipam/ipam.test.ts
   - _Requirements: 6.1, 6.2, 6.3_
 
-- [ ] 5. Build VPC component with IPAM and Transit Gateway integration
+- [x] 5. Build VPC component with IPAM and Transit Gateway integration
   - Research existing Pulumi VPC packages and evaluate for reuse
   - Implement VPC component class in aws-ts-resilient-observability/components/vpc/index.ts
   - Add IPAM integration for automatic CIDR block allocation
