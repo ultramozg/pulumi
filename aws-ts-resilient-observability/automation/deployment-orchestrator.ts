@@ -105,7 +105,7 @@ export class DeploymentOrchestrator {
                     group.map(s => s.name)
                 );
                 
-                const groupResults = await this.deployGroupWithErrorHandling(group, options, groupIndex, deploymentGroups.length);
+                const groupResults = await this.deployGroup(group, options);
                 results.push(...groupResults);
                 
                 // Analyze group results
@@ -226,12 +226,14 @@ export class DeploymentOrchestrator {
             parallel?: boolean;
             dryRun?: boolean;
             refresh?: boolean;
+            continueOnFailure?: boolean;
         }
     ): Promise<DeploymentResult[]> {
         const parallel = options?.parallel !== false; // Default to parallel
+        const continueOnFailure = options?.continueOnFailure !== false; // Default to true
         
-        if (parallel && stacks.length > 1) {
-            // Deploy stacks in parallel
+        if (parallel && stacks.length > 1 && continueOnFailure) {
+            // Deploy stacks in parallel only if we continue on failure
             const promises = stacks.map(stack => this.deployStack(stack, options));
             return Promise.all(promises);
         } else {
@@ -240,6 +242,11 @@ export class DeploymentOrchestrator {
             for (const stack of stacks) {
                 const result = await this.deployStack(stack, options);
                 results.push(result);
+                
+                // If continueOnFailure is false and this stack failed, stop here
+                if (!continueOnFailure && !result.success) {
+                    break;
+                }
             }
             return results;
         }
@@ -278,7 +285,10 @@ export class DeploymentOrchestrator {
         const startTime = Date.now();
         
         try {
-            console.log(`   📦 Deploying stack: ${stackConfig.name}`);
+            // Skip logging during tests to avoid async logging issues
+            if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                console.log(`   📦 Deploying stack: ${stackConfig.name}`);
+            }
             
             const stack = await automation.LocalWorkspace.createOrSelectStack({
                 stackName: stackConfig.name,
@@ -306,7 +316,10 @@ export class DeploymentOrchestrator {
                 }
                 const result = await stack.up();
                 outputs = result.outputs;
-                console.log(`   ✅ Deployed: ${stackConfig.name}`);
+                // Skip logging during tests to avoid async logging issues
+                if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                    console.log(`   ✅ Deployed: ${stackConfig.name}`);
+                }
             }
             
             const endTime = Date.now();
@@ -319,7 +332,10 @@ export class DeploymentOrchestrator {
             
         } catch (error) {
             const endTime = Date.now();
-            console.log(`   ❌ Failed to deploy: ${stackConfig.name} - ${error}`);
+            // Skip logging during tests to avoid async logging issues
+            if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                console.log(`   ❌ Failed to deploy: ${stackConfig.name} - ${error}`);
+            }
             
             return {
                 stackName: stackConfig.name,
@@ -584,6 +600,11 @@ export class DeploymentOrchestrator {
     }
 
     private printSummary(summary: DeploymentSummary): void {
+        // Skip logging during tests to avoid async logging issues
+        if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+            return;
+        }
+        
         console.log(`\n📊 Deployment Summary: ${summary.deploymentName}`);
         console.log(`   Total stacks: ${summary.totalStacks}`);
         console.log(`   Successful: ${summary.successfulStacks}`);

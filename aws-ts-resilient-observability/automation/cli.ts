@@ -3,15 +3,19 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { DeploymentOrchestrator } from './deployment-orchestrator';
+import { InfrastructureAutomation } from '../index';
+import { ConfigManager } from './config-manager';
 
 /**
- * CLI interface for the automation API
+ * Enhanced CLI interface for the automation API with run-all capabilities
  */
 class AutomationCLI {
     private orchestrator: DeploymentOrchestrator;
+    private automation: InfrastructureAutomation;
     
     constructor() {
         this.orchestrator = new DeploymentOrchestrator();
+        this.automation = new InfrastructureAutomation();
     }
     
     async run() {
@@ -35,6 +39,21 @@ class AutomationCLI {
                 case 'preview':
                     await this.handlePreview(args.slice(1));
                     break;
+                case 'run-all':
+                    await this.handleRunAll(args.slice(1));
+                    break;
+                case 'deploy-components':
+                    await this.handleDeployComponents(args.slice(1));
+                    break;
+                case 'validate':
+                    await this.handleValidate(args.slice(1));
+                    break;
+                case 'status':
+                    await this.handleStatus(args.slice(1));
+                    break;
+                case 'rollback':
+                    await this.handleRollback(args.slice(1));
+                    break;
                 case 'help':
                     this.printHelp();
                     break;
@@ -57,13 +76,17 @@ class AutomationCLI {
             throw new Error(`Configuration file not found: ${configPath}`);
         }
         
-        console.log(`Using configuration: ${configPath}`);
+        console.log(`🚀 Deploying infrastructure from: ${configPath}`);
         
-        const summary = await this.orchestrator.deployFromConfig(configPath, {
+        const summary = await this.automation.deployFromConfig(configPath, {
             parallel: options.parallel !== false,
             refresh: options.refresh === true,
+            continueOnFailure: options.continueOnFailure === true,
+            rollbackOnFailure: options.rollbackOnFailure === true,
             dryRun: false
         });
+        
+        this.printDeploymentSummary(summary);
         
         if (summary.failedStacks > 0) {
             process.exit(1);
@@ -107,16 +130,204 @@ class AutomationCLI {
             throw new Error(`Configuration file not found: ${configPath}`);
         }
         
-        console.log(`Using configuration: ${configPath}`);
+        console.log(`🔍 Previewing infrastructure from: ${configPath}`);
         
-        const summary = await this.orchestrator.deployFromConfig(configPath, {
+        const config = ConfigManager.loadConfig(configPath);
+        const summary = await this.automation.previewAll(config, {
             parallel: options.parallel !== false,
-            refresh: options.refresh === true,
-            dryRun: true
+            refresh: options.refresh === true
         });
+        
+        this.printDeploymentSummary(summary);
         
         if (summary.failedStacks > 0) {
             process.exit(1);
+        }
+    }
+    
+    private async handleRunAll(args: string[]) {
+        const options = this.parseOptions(args);
+        const region = options.region || 'us-east-1';
+        const components = options.components ? options.components.split(',') : undefined;
+        const exclude = options.exclude ? options.exclude.split(',') : undefined;
+        
+        console.log(`🚀 Running all components deployment in region: ${region}`);
+        
+        const config = this.automation.createComponentsConfig('run-all-deployment', {
+            region,
+            tags: {
+                DeploymentType: 'run-all',
+                Region: region,
+                Timestamp: new Date().toISOString()
+            },
+            includeComponents: components,
+            excludeComponents: exclude
+        });
+        
+        const summary = await this.automation.deployAll(config, {
+            parallel: options.parallel !== false,
+            refresh: options.refresh === true,
+            continueOnFailure: options.continueOnFailure === true,
+            rollbackOnFailure: options.rollbackOnFailure === true
+        });
+        
+        this.printDeploymentSummary(summary);
+        
+        if (summary.failedStacks > 0) {
+            process.exit(1);
+        }
+    }
+    
+    private async handleDeployComponents(args: string[]) {
+        const options = this.parseOptions(args);
+        
+        if (!options.components) {
+            throw new Error('--components option is required. Specify components as comma-separated list.');
+        }
+        
+        const region = options.region || 'us-east-1';
+        const components = options.components.split(',');
+        
+        console.log(`🚀 Deploying specific components: ${components.join(', ')}`);
+        
+        const config = this.automation.createComponentsConfig('component-deployment', {
+            region,
+            tags: {
+                DeploymentType: 'component-specific',
+                Region: region,
+                Components: components.join(',')
+            },
+            includeComponents: components
+        });
+        
+        const summary = await this.automation.deployAll(config, {
+            parallel: options.parallel !== false,
+            refresh: options.refresh === true,
+            continueOnFailure: options.continueOnFailure === true,
+            rollbackOnFailure: options.rollbackOnFailure === true
+        });
+        
+        this.printDeploymentSummary(summary);
+        
+        if (summary.failedStacks > 0) {
+            process.exit(1);
+        }
+    }
+    
+    private async handleValidate(args: string[]) {
+        const options = this.parseOptions(args);
+        const configPath = options.config || this.findDefaultConfig();
+        
+        if (!configPath || !fs.existsSync(configPath)) {
+            throw new Error(`Configuration file not found: ${configPath}`);
+        }
+        
+        console.log(`🔍 Validating configuration: ${configPath}`);
+        
+        try {
+            const config = ConfigManager.loadConfig(configPath);
+            console.log(`✅ Configuration is valid`);
+            console.log(`   Deployment: ${config.name}`);
+            console.log(`   Stacks: ${config.stacks.length}`);
+            console.log(`   Default Region: ${config.defaultRegion || 'not specified'}`);
+            
+            // Validate dependencies
+            const stackNames = config.stacks.map(s => s.name);
+            for (const stack of config.stacks) {
+                if (stack.dependencies) {
+                    for (const dep of stack.dependencies) {
+                        if (!stackNames.includes(dep)) {
+                            throw new Error(`Stack '${stack.name}' depends on '${dep}' which is not defined`);
+                        }
+                    }
+                }
+            }
+            
+            console.log(`✅ All dependencies are valid`);
+        } catch (error) {
+            console.error(`❌ Configuration validation failed: ${error}`);
+            process.exit(1);
+        }
+    }
+    
+    private async handleStatus(args: string[]) {
+        const options = this.parseOptions(args);
+        const configPath = options.config || this.findDefaultConfig();
+        
+        if (!configPath || !fs.existsSync(configPath)) {
+            throw new Error(`Configuration file not found: ${configPath}`);
+        }
+        
+        console.log(`📊 Checking deployment status from: ${configPath}`);
+        
+        // This would require implementing stack status checking
+        // For now, just show configuration info
+        const config = ConfigManager.loadConfig(configPath);
+        console.log(`\nDeployment: ${config.name}`);
+        console.log(`Stacks (${config.stacks.length}):`);
+        
+        for (const stack of config.stacks) {
+            console.log(`  📦 ${stack.name}`);
+            console.log(`     Work Dir: ${stack.workDir}`);
+            console.log(`     Components: ${stack.components.length}`);
+            if (stack.dependencies && stack.dependencies.length > 0) {
+                console.log(`     Dependencies: ${stack.dependencies.join(', ')}`);
+            }
+        }
+    }
+    
+    private async handleRollback(args: string[]) {
+        const options = this.parseOptions(args);
+        const configPath = options.config || this.findDefaultConfig();
+        
+        if (!configPath || !fs.existsSync(configPath)) {
+            throw new Error(`Configuration file not found: ${configPath}`);
+        }
+        
+        if (!options.force) {
+            console.log('⚠️  This will destroy all resources in the deployment.');
+            console.log('Use --force to confirm rollback.');
+            return;
+        }
+        
+        console.log(`🔄 Rolling back deployment from: ${configPath}`);
+        
+        const config = ConfigManager.loadConfig(configPath);
+        const summary = await this.automation.destroyAll(config, {
+            parallel: options.parallel !== false
+        });
+        
+        this.printDeploymentSummary(summary);
+        
+        if (summary.failedStacks > 0) {
+            process.exit(1);
+        }
+    }
+    
+    private printDeploymentSummary(summary: any) {
+        console.log(`\n📊 Deployment Summary: ${summary.deploymentName}`);
+        console.log(`   Total stacks: ${summary.totalStacks}`);
+        console.log(`   Successful: ${summary.successfulStacks} ✅`);
+        console.log(`   Failed: ${summary.failedStacks} ${summary.failedStacks > 0 ? '❌' : ''}`);
+        console.log(`   Duration: ${(summary.totalDuration / 1000).toFixed(2)}s`);
+        
+        if (summary.failedStacks > 0) {
+            console.log(`\n❌ Failed stacks:`);
+            summary.results
+                .filter((r: any) => !r.success)
+                .forEach((result: any) => {
+                    console.log(`   ${result.stackName}: ${result.error}`);
+                });
+        }
+        
+        if (summary.successfulStacks > 0) {
+            console.log(`\n✅ Successful stacks:`);
+            summary.results
+                .filter((r: any) => r.success)
+                .forEach((result: any) => {
+                    const duration = result.duration ? `(${(result.duration / 1000).toFixed(2)}s)` : '';
+                    console.log(`   ${result.stackName} ${duration}`);
+                });
         }
     }
     
@@ -129,15 +340,13 @@ class AutomationCLI {
             if (arg.startsWith('--')) {
                 const key = arg.slice(2);
                 
-                if (key === 'config' && i + 1 < args.length) {
-                    options.config = args[i + 1];
+                if (['config', 'region', 'components', 'exclude'].includes(key) && i + 1 < args.length) {
+                    options[key] = args[i + 1];
                     i++; // Skip next argument
                 } else if (key === 'no-parallel') {
                     options.parallel = false;
-                } else if (key === 'refresh') {
-                    options.refresh = true;
-                } else if (key === 'force') {
-                    options.force = true;
+                } else if (['refresh', 'force', 'continue-on-failure', 'rollback-on-failure'].includes(key)) {
+                    options[key.replace('-', '')] = true;
                 } else {
                     options[key] = true;
                 }
@@ -168,27 +377,60 @@ class AutomationCLI {
     
     private printHelp() {
         console.log(`
-Infrastructure Automation CLI
+Infrastructure Automation CLI - Run-All Capabilities
 
 Usage:
   automation <command> [options]
 
 Commands:
-  deploy    Deploy all stacks from configuration
-  destroy   Destroy all stacks from configuration
-  preview   Preview deployment changes
-  help      Show this help message
+  deploy              Deploy all stacks from configuration file
+  destroy             Destroy all stacks from configuration file
+  preview             Preview deployment changes without applying
+  run-all             Deploy all available components with default configuration
+  deploy-components   Deploy specific components only
+  validate            Validate deployment configuration file
+  status              Show deployment status and configuration info
+  rollback            Rollback (destroy) entire deployment
+  help                Show this help message
 
 Options:
-  --config <path>    Path to deployment configuration file
-  --no-parallel      Disable parallel deployment within groups
-  --refresh          Refresh stack state before deployment
-  --force            Skip confirmation prompts (for destroy)
+  --config <path>           Path to deployment configuration file
+  --region <region>         AWS region for deployment (default: us-east-1)
+  --components <list>       Comma-separated list of components to deploy
+  --exclude <list>          Comma-separated list of components to exclude
+  --no-parallel             Disable parallel deployment within groups
+  --refresh                 Refresh stack state before deployment
+  --continue-on-failure     Continue deployment even if some stacks fail
+  --rollback-on-failure     Automatically rollback on deployment failure
+  --force                   Skip confirmation prompts
 
 Examples:
-  automation deploy --config deployment.yaml
+  # Deploy from configuration file
+  automation deploy --config deployment.yaml --rollback-on-failure
+  
+  # Preview changes with refresh
   automation preview --config deployment.yaml --refresh
-  automation destroy --config deployment.yaml --force
+  
+  # Deploy all components with default settings
+  automation run-all --region us-west-2
+  
+  # Deploy specific components only
+  automation deploy-components --components vpc,ecr,eks --region us-east-1
+  
+  # Deploy excluding certain components
+  automation run-all --exclude rds,eks --region us-east-1
+  
+  # Validate configuration
+  automation validate --config deployment.yaml
+  
+  # Check deployment status
+  automation status --config deployment.yaml
+  
+  # Rollback entire deployment
+  automation rollback --config deployment.yaml --force
+  
+  # Destroy with parallel execution
+  automation destroy --config deployment.yaml --force --no-parallel
         `);
     }
 }

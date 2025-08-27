@@ -1,8 +1,0 @@
-{
-  "name": "integration-test-program",
-  "main": "index.ts",
-  "dependencies": {
-    "@pulumi/pulumi": "^3.113.0",
-    "@pulumi/aws": "^7.5.0"
-  }
-}

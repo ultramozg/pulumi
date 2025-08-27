@@ -228,9 +228,10 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
      * Get availability zones for the specified region
      */
     private getAvailabilityZones(region: string, count: number): pulumi.Output<string[]> {
+        const provider = this.createProvider(region);
         return pulumi.output(aws.getAvailabilityZones({
             state: "available"
-        }, { provider: this.createProvider(region) })).apply(azs => {
+        }, { provider })).apply(azs => {
             const names = azs.names || [];
             return names.slice(0, count);
         });

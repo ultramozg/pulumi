@@ -30,6 +30,7 @@ export interface DeploymentResult {
     outputs?: Record<string, any>;
     error?: string;
     duration?: number;
+    retryCount?: number;
 }
 
 export interface DeploymentSummary {

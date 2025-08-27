@@ -200,26 +200,17 @@ export abstract class BaseAWSComponent extends pulumi.ComponentResource {
     /**
      * Helper method to create AWS provider for specific region with error handling
      */
-    protected async createProvider(region?: string): Promise<aws.Provider> {
+    protected createProvider(region?: string): aws.Provider {
         const targetRegion = region || this.region;
-        const operation = `create-provider-${targetRegion}`;
         
-        return ErrorHandler.executeWithRecovery(
-            async () => {
-                this.logger.debug("Creating AWS provider", { region: targetRegion });
-                
-                const provider = new aws.Provider(`${this.urn}-provider-${targetRegion}`, {
-                    region: targetRegion
-                }, { parent: this });
+        this.logger.debug("Creating AWS provider", { region: targetRegion });
+        
+        const provider = new aws.Provider(`${this.urn}-provider-${targetRegion}`, {
+            region: targetRegion
+        }, { parent: this });
 
-                this.logger.debug("AWS provider created successfully", { region: targetRegion });
-                return provider;
-            },
-            operation,
-            this.getResourceType(),
-            this.getResourceName(),
-            this.errorHandlingOptions
-        );
+        this.logger.debug("AWS provider created successfully", { region: targetRegion });
+        return provider;
     }
 
     /**

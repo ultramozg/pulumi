@@ -203,6 +203,11 @@ export class ComponentLogger {
      * Internal logging method
      */
     private log(level: LogLevel, message: string, context?: LogContext): void {
+        // Skip logging during tests to avoid async logging issues
+        if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+            return;
+        }
+        
         const fullContext = {
             ...this.baseContext,
             timestamp: new Date().toISOString(),

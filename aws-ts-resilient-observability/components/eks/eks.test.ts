@@ -28,6 +28,6 @@ describe("EKSComponent", () => {
 
         expect(() => {
             new EKSComponent("test-region-eks", args);
-        }).toThrow("EKSComponent: Invalid region format: invalid-region");
+        }).toThrow("Invalid region: expected AWS region format (e.g., us-east-1), got string (invalid-region)");
     });
 });

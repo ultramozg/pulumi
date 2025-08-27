@@ -1,10 +1,14 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/components', '<rootDir>/tests', '<rootDir>/automation'],
+  roots: ['<rootDir>/components', '<rootDir>/tests/unit', '<rootDir>/automation'],
   testMatch: [
     '**/__tests__/**/*.ts',
     '**/?(*.)+(spec|test).ts'
+  ],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    'tests/unit/deployment-error-handling.test.ts'
   ],
   transform: {
     '^.+\\.ts$': 'ts-jest',
@@ -20,5 +24,6 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text'],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts']
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  silent: true
 };

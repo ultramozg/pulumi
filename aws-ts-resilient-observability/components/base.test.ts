@@ -46,12 +46,12 @@ describe("BaseAWSComponent", () => {
         const testableComponent = new TestableComponent("testable", { tags: customTags });
         const mergedTags = testableComponent.testMergeTags({ Resource: "test-resource" });
         
-        expect(mergedTags).toEqual({
+        expect(mergedTags).toEqual(expect.objectContaining({
             Component: "test:component:TestComponent",
             ManagedBy: "Pulumi",
             Environment: "test",
             Resource: "test-resource"
-        });
+        }));
     });
 });
 

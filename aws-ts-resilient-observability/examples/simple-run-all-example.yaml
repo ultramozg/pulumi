@@ -1,0 +1,71 @@
+name: "simple-run-all-example"
+description: "Simple example demonstrating run-all capabilities with basic components"
+defaultRegion: "us-east-1"
+defaultTags:
+  Environment: "development"
+  Project: "run-all-demo"
+  ManagedBy: "pulumi-automation"
+
+stacks:
+  # Basic VPC
+  - name: "networking"
+    workDir: "./shared-services"
+    components:
+      - type: "vpc"
+        name: "demo-vpc"
+        config:
+          region: "us-east-1"
+          cidrBlock: "10.0.0.0/16"
+          internetGatewayEnabled: true
+          natGatewayEnabled: false
+          availabilityZoneCount: 2
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 24
+            private:
+              type: "private"
+              cidrPrefix: 24
+    tags:
+      Layer: "networking"
+
+  # Container registry
+  - name: "container-registry"
+    workDir: "./shared-services"
+    components:
+      - type: "ecr"
+        name: "demo-registry"
+        config:
+          repositories:
+            - name: "demo-app"
+              shareWithOrganization: false
+          replicationEnabled: false
+          sourceRegion: "us-east-1"
+          destinationRegion: "us-east-1"
+    tags:
+      Layer: "container-registry"
+
+  # Simple EKS cluster
+  - name: "kubernetes"
+    workDir: "./workloads"
+    dependencies: ["networking", "container-registry"]
+    components:
+      - type: "eks"
+        name: "demo-cluster"
+        config:
+          clusterName: "demo-cluster"
+          region: "us-east-1"
+          autoModeEnabled: true
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+          nodeGroups:
+            - name: "demo-nodes"
+              instanceTypes: ["t3.medium"]
+              scalingConfig:
+                minSize: 1
+                maxSize: 3
+                desiredSize: 2
+    tags:
+      Layer: "kubernetes"

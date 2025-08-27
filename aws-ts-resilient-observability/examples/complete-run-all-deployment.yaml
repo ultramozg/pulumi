@@ -1,0 +1,662 @@
+name: "complete-run-all-deployment"
+description: "Complete infrastructure deployment demonstrating run-all capabilities with all components"
+defaultRegion: "us-east-1"
+defaultTags:
+  Environment: "production"
+  Project: "aws-infrastructure-components"
+  ManagedBy: "pulumi-automation"
+  DeploymentType: "run-all"
+  Version: "1.0.0"
+
+# Global deployment options
+deploymentOptions:
+  parallelDeployment: true
+  refreshBeforeDeployment: false
+  continueOnError: false
+  rollbackOnFailure: true
+  maxConcurrency: 3
+
+stacks:
+  # Foundation: IPAM for centralized IP management
+  - name: "ipam-foundation"
+    workDir: "./shared-services"
+    description: "Centralized IP Address Management for the organization"
+    components:
+      - type: "ipam"
+        name: "central-ipam"
+        config:
+          cidrBlocks:
+            - "10.0.0.0/8"
+            - "172.16.0.0/12"
+          shareWithOrganization: true
+          operatingRegions:
+            - "us-east-1"
+            - "us-west-2"
+            - "eu-west-1"
+          tags:
+            Purpose: "centralized-ip-management"
+            Scope: "organization-wide"
+    tags:
+      Layer: "foundation"
+      Component: "ipam"
+
+  # Multi-region VPC deployment
+  - name: "vpc-us-east-1"
+    workDir: "./workloads"
+    dependencies: ["ipam-foundation"]
+    description: "Production VPC in US East 1"
+    components:
+      - type: "vpc"
+        name: "production-vpc-east"
+        region: "us-east-1"
+        config:
+          region: "us-east-1"
+          ipamPoolArn: "${ipam-foundation.ipam.poolArn}"
+          internetGatewayEnabled: true
+          natGatewayEnabled: true
+          availabilityZoneCount: 3
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 24
+              availabilityZones: [0, 1, 2]
+            private:
+              type: "private"
+              cidrPrefix: 22
+              availabilityZones: [0, 1, 2]
+            database:
+              type: "private"
+              cidrPrefix: 26
+              availabilityZones: [0, 1, 2]
+            transit:
+              type: "transit-gateway"
+              cidrPrefix: 28
+              availabilityZones: [0, 1, 2]
+          enableDnsHostnames: true
+          enableDnsSupport: true
+    tags:
+      Layer: "networking"
+      Region: "us-east-1"
+      Component: "vpc"
+
+  - name: "vpc-us-west-2"
+    workDir: "./workloads"
+    dependencies: ["ipam-foundation"]
+    description: "Production VPC in US West 2"
+    components:
+      - type: "vpc"
+        name: "production-vpc-west"
+        region: "us-west-2"
+        config:
+          region: "us-west-2"
+          ipamPoolArn: "${ipam-foundation.ipam.poolArn}"
+          internetGatewayEnabled: true
+          natGatewayEnabled: true
+          availabilityZoneCount: 3
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 24
+              availabilityZones: [0, 1, 2]
+            private:
+              type: "private"
+              cidrPrefix: 22
+              availabilityZones: [0, 1, 2]
+            database:
+              type: "private"
+              cidrPrefix: 26
+              availabilityZones: [0, 1, 2]
+            transit:
+              type: "transit-gateway"
+              cidrPrefix: 28
+              availabilityZones: [0, 1, 2]
+          enableDnsHostnames: true
+          enableDnsSupport: true
+    tags:
+      Layer: "networking"
+      Region: "us-west-2"
+      Component: "vpc"
+
+  - name: "vpc-eu-west-1"
+    workDir: "./workloads"
+    dependencies: ["ipam-foundation"]
+    description: "Production VPC in EU West 1"
+    components:
+      - type: "vpc"
+        name: "production-vpc-eu"
+        region: "eu-west-1"
+        config:
+          region: "eu-west-1"
+          ipamPoolArn: "${ipam-foundation.ipam.poolArn}"
+          internetGatewayEnabled: true
+          natGatewayEnabled: true
+          availabilityZoneCount: 3
+          subnets:
+            public:
+              type: "public"
+              cidrPrefix: 24
+              availabilityZones: [0, 1, 2]
+            private:
+              type: "private"
+              cidrPrefix: 22
+              availabilityZones: [0, 1, 2]
+            database:
+              type: "private"
+              cidrPrefix: 26
+              availabilityZones: [0, 1, 2]
+          enableDnsHostnames: true
+          enableDnsSupport: true
+    tags:
+      Layer: "networking"
+      Region: "eu-west-1"
+      Component: "vpc"
+
+  # Container registry with global replication
+  - name: "container-registry"
+    workDir: "./shared-services"
+    description: "Global container registry with cross-region replication"
+    components:
+      - type: "ecr"
+        name: "global-registry"
+        config:
+          repositories:
+            - name: "web-frontend"
+              shareWithOrganization: true
+              lifecyclePolicy: |
+                {
+                  "rules": [
+                    {
+                      "rulePriority": 1,
+                      "description": "Keep last 10 production images",
+                      "selection": {
+                        "tagStatus": "tagged",
+                        "tagPrefixList": ["prod", "release"],
+                        "countType": "imageCountMoreThan",
+                        "countNumber": 10
+                      },
+                      "action": {"type": "expire"}
+                    },
+                    {
+                      "rulePriority": 2,
+                      "description": "Keep last 5 development images",
+                      "selection": {
+                        "tagStatus": "tagged",
+                        "tagPrefixList": ["dev", "staging"],
+                        "countType": "imageCountMoreThan",
+                        "countNumber": 5
+                      },
+                      "action": {"type": "expire"}
+                    },
+                    {
+                      "rulePriority": 3,
+                      "description": "Delete untagged images after 1 day",
+                      "selection": {
+                        "tagStatus": "untagged",
+                        "countType": "sinceImagePushed",
+                        "countUnit": "days",
+                        "countNumber": 1
+                      },
+                      "action": {"type": "expire"}
+                    }
+                  ]
+                }
+            - name: "api-backend"
+              shareWithOrganization: true
+              lifecyclePolicy: |
+                {
+                  "rules": [
+                    {
+                      "rulePriority": 1,
+                      "description": "Keep last 10 production images",
+                      "selection": {
+                        "tagStatus": "tagged",
+                        "tagPrefixList": ["prod", "release"],
+                        "countType": "imageCountMoreThan",
+                        "countNumber": 10
+                      },
+                      "action": {"type": "expire"}
+                    }
+                  ]
+                }
+            - name: "worker-service"
+              shareWithOrganization: true
+            - name: "data-processor"
+              shareWithOrganization: false
+              lifecyclePolicy: |
+                {
+                  "rules": [
+                    {
+                      "rulePriority": 1,
+                      "description": "Keep last 3 images only",
+                      "selection": {
+                        "tagStatus": "any",
+                        "countType": "imageCountMoreThan",
+                        "countNumber": 3
+                      },
+                      "action": {"type": "expire"}
+                    }
+                  ]
+                }
+          replicationEnabled: true
+          sourceRegion: "us-east-1"
+          destinationRegion: "us-west-2"
+          crossRegionReplication:
+            - sourceRegion: "us-east-1"
+              destinationRegions: ["us-west-2", "eu-west-1"]
+            - sourceRegion: "us-west-2"
+              destinationRegions: ["us-east-1"]
+    tags:
+      Layer: "container-registry"
+      Component: "ecr"
+      Scope: "global"
+
+  # DNS and certificate management
+  - name: "dns-management"
+    workDir: "./shared-services"
+    description: "Global DNS management and SSL certificates"
+    components:
+      - type: "route53"
+        name: "global-dns"
+        config:
+          hostedZones:
+            - name: "example.com"
+              comment: "Primary public domain"
+              private: false
+            - name: "internal.example.com"
+              comment: "Internal private domain"
+              private: true
+              vpcIds: 
+                - "${vpc-us-east-1.vpc.id}"
+                - "${vpc-us-west-2.vpc.id}"
+                - "${vpc-eu-west-1.vpc.id}"
+            - name: "api.example.com"
+              comment: "API subdomain"
+              private: false
+          records:
+            - zoneName: "example.com"
+              name: "www"
+              type: "CNAME"
+              values: ["example.com"]
+              ttl: 300
+            - zoneName: "example.com"
+              name: "api"
+              type: "CNAME"
+              values: ["api.example.com"]
+              ttl: 300
+            - zoneName: "internal.example.com"
+              name: "db"
+              type: "CNAME"
+              values: ["database.internal.example.com"]
+              ttl: 60
+      - type: "acm"
+        name: "ssl-certificates"
+        config:
+          certificates:
+            - domainName: "*.example.com"
+              subjectAlternativeNames:
+                - "example.com"
+                - "*.api.example.com"
+              validationMethod: "DNS"
+              hostedZoneId: "${dns-management.route53.hostedZoneId}"
+              region: "us-east-1"
+            - domainName: "*.example.com"
+              subjectAlternativeNames:
+                - "example.com"
+              validationMethod: "DNS"
+              hostedZoneId: "${dns-management.route53.hostedZoneId}"
+              region: "us-west-2"
+            - domainName: "*.example.com"
+              subjectAlternativeNames:
+                - "example.com"
+              validationMethod: "DNS"
+              hostedZoneId: "${dns-management.route53.hostedZoneId}"
+              region: "eu-west-1"
+    tags:
+      Layer: "dns-certificates"
+      Component: "route53-acm"
+      Scope: "global"
+
+  # Global database with multi-region setup
+  - name: "database-global"
+    workDir: "./workloads"
+    dependencies: ["vpc-us-east-1", "vpc-us-west-2", "vpc-eu-west-1"]
+    description: "Global database with multi-region Aurora clusters"
+    components:
+      - type: "rds"
+        name: "global-database"
+        config:
+          globalClusterIdentifier: "production-global-db"
+          engine: "aurora-postgresql"
+          engineVersion: "15.4"
+          databaseName: "production"
+          masterUsername: "dbadmin"
+          regions:
+            - region: "us-east-1"
+              isPrimary: true
+              subnetIds: "${vpc-us-east-1.vpc.databaseSubnetIds}"
+              createSecurityGroup: true
+              securityGroupRules:
+                - type: "ingress"
+                  fromPort: 5432
+                  toPort: 5432
+                  protocol: "tcp"
+                  sourceSecurityGroupId: "${vpc-us-east-1.vpc.defaultSecurityGroupId}"
+                  description: "PostgreSQL access from VPC"
+              instanceClass: "db.r6g.large"
+              instanceCount: 2
+              backupRetentionPeriod: 7
+              preferredBackupWindow: "03:00-04:00"
+              preferredMaintenanceWindow: "sun:04:00-sun:05:00"
+            - region: "us-west-2"
+              isPrimary: false
+              subnetIds: "${vpc-us-west-2.vpc.databaseSubnetIds}"
+              createSecurityGroup: true
+              securityGroupRules:
+                - type: "ingress"
+                  fromPort: 5432
+                  toPort: 5432
+                  protocol: "tcp"
+                  sourceSecurityGroupId: "${vpc-us-west-2.vpc.defaultSecurityGroupId}"
+                  description: "PostgreSQL access from VPC"
+              instanceClass: "db.r6g.large"
+              instanceCount: 1
+              backupRetentionPeriod: 7
+            - region: "eu-west-1"
+              isPrimary: false
+              subnetIds: "${vpc-eu-west-1.vpc.databaseSubnetIds}"
+              createSecurityGroup: true
+              securityGroupRules:
+                - type: "ingress"
+                  fromPort: 5432
+                  toPort: 5432
+                  protocol: "tcp"
+                  sourceSecurityGroupId: "${vpc-eu-west-1.vpc.defaultSecurityGroupId}"
+                  description: "PostgreSQL access from VPC"
+              instanceClass: "db.r6g.medium"
+              instanceCount: 1
+              backupRetentionPeriod: 7
+          enableCloudwatchLogsExports: ["postgresql"]
+          monitoringInterval: 60
+          performanceInsightsEnabled: true
+    tags:
+      Layer: "database"
+      Component: "rds"
+      Scope: "global"
+
+  # Kubernetes clusters in multiple regions
+  - name: "kubernetes-us-east-1"
+    workDir: "./workloads"
+    dependencies: ["vpc-us-east-1", "container-registry"]
+    description: "EKS cluster in US East 1"
+    components:
+      - type: "eks"
+        name: "production-eks-east"
+        region: "us-east-1"
+        config:
+          clusterName: "production-east"
+          version: "1.31"
+          region: "us-east-1"
+          subnetIds: "${vpc-us-east-1.vpc.privateSubnetIds}"
+          autoModeEnabled: true
+          endpointConfig:
+            privateAccess: true
+            publicAccess: true
+            publicAccessCidrs: ["0.0.0.0/0"]
+          enableCloudWatchLogging: true
+          logTypes: ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            - "aws-ebs-csi-driver"
+            - "aws-load-balancer-controller"
+            - "cluster-autoscaler"
+          nodeGroups:
+            - name: "general-purpose"
+              instanceTypes: ["m5.large", "m5.xlarge", "m5.2xlarge"]
+              scalingConfig:
+                minSize: 3
+                maxSize: 20
+                desiredSize: 6
+              diskSize: 50
+              capacityType: "ON_DEMAND"
+              labels:
+                nodegroup-type: "general-purpose"
+                environment: "production"
+              taints: []
+            - name: "compute-optimized"
+              instanceTypes: ["c5.large", "c5.xlarge", "c5.2xlarge"]
+              scalingConfig:
+                minSize: 0
+                maxSize: 10
+                desiredSize: 0
+              diskSize: 50
+              capacityType: "SPOT"
+              labels:
+                nodegroup-type: "compute-optimized"
+                environment: "production"
+              taints:
+                - key: "compute-optimized"
+                  value: "true"
+                  effect: "NO_SCHEDULE"
+            - name: "memory-optimized"
+              instanceTypes: ["r5.large", "r5.xlarge", "r5.2xlarge"]
+              scalingConfig:
+                minSize: 0
+                maxSize: 5
+                desiredSize: 0
+              diskSize: 50
+              capacityType: "ON_DEMAND"
+              labels:
+                nodegroup-type: "memory-optimized"
+                environment: "production"
+              taints:
+                - key: "memory-optimized"
+                  value: "true"
+                  effect: "NO_SCHEDULE"
+    tags:
+      Layer: "kubernetes"
+      Region: "us-east-1"
+      Component: "eks"
+
+  - name: "kubernetes-us-west-2"
+    workDir: "./workloads"
+    dependencies: ["vpc-us-west-2", "container-registry"]
+    description: "EKS cluster in US West 2"
+    components:
+      - type: "eks"
+        name: "production-eks-west"
+        region: "us-west-2"
+        config:
+          clusterName: "production-west"
+          version: "1.31"
+          region: "us-west-2"
+          subnetIds: "${vpc-us-west-2.vpc.privateSubnetIds}"
+          autoModeEnabled: true
+          endpointConfig:
+            privateAccess: true
+            publicAccess: true
+            publicAccessCidrs: ["0.0.0.0/0"]
+          enableCloudWatchLogging: true
+          logTypes: ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            - "aws-ebs-csi-driver"
+            - "aws-load-balancer-controller"
+            - "cluster-autoscaler"
+          nodeGroups:
+            - name: "general-purpose"
+              instanceTypes: ["m5.large", "m5.xlarge", "m5.2xlarge"]
+              scalingConfig:
+                minSize: 2
+                maxSize: 15
+                desiredSize: 4
+              diskSize: 50
+              capacityType: "ON_DEMAND"
+              labels:
+                nodegroup-type: "general-purpose"
+                environment: "production"
+            - name: "compute-optimized"
+              instanceTypes: ["c5.large", "c5.xlarge", "c5.2xlarge"]
+              scalingConfig:
+                minSize: 0
+                maxSize: 8
+                desiredSize: 0
+              diskSize: 50
+              capacityType: "SPOT"
+              labels:
+                nodegroup-type: "compute-optimized"
+                environment: "production"
+              taints:
+                - key: "compute-optimized"
+                  value: "true"
+                  effect: "NO_SCHEDULE"
+    tags:
+      Layer: "kubernetes"
+      Region: "us-west-2"
+      Component: "eks"
+
+  - name: "kubernetes-eu-west-1"
+    workDir: "./workloads"
+    dependencies: ["vpc-eu-west-1", "container-registry"]
+    description: "EKS cluster in EU West 1"
+    components:
+      - type: "eks"
+        name: "production-eks-eu"
+        region: "eu-west-1"
+        config:
+          clusterName: "production-eu"
+          version: "1.31"
+          region: "eu-west-1"
+          subnetIds: "${vpc-eu-west-1.vpc.privateSubnetIds}"
+          autoModeEnabled: true
+          endpointConfig:
+            privateAccess: true
+            publicAccess: true
+            publicAccessCidrs: ["0.0.0.0/0"]
+          enableCloudWatchLogging: true
+          logTypes: ["api", "audit", "authenticator"]
+          addons:
+            - "vpc-cni"
+            - "coredns"
+            - "kube-proxy"
+            - "aws-ebs-csi-driver"
+            - "aws-load-balancer-controller"
+          nodeGroups:
+            - name: "general-purpose"
+              instanceTypes: ["m5.large", "m5.xlarge"]
+              scalingConfig:
+                minSize: 1
+                maxSize: 10
+                desiredSize: 2
+              diskSize: 50
+              capacityType: "ON_DEMAND"
+              labels:
+                nodegroup-type: "general-purpose"
+                environment: "production"
+    tags:
+      Layer: "kubernetes"
+      Region: "eu-west-1"
+      Component: "eks"
+
+# Post-deployment validation and outputs
+postDeployment:
+  - action: "validate"
+    description: "Validate all components are healthy"
+    checks:
+      - type: "ipam"
+        target: "${ipam-foundation.ipam.id}"
+        expected: "available"
+        timeout: "2m"
+      - type: "vpc"
+        target: "${vpc-us-east-1.vpc.id}"
+        expected: "available"
+        timeout: "2m"
+      - type: "ecr"
+        target: "${container-registry.ecr.registryId}"
+        expected: "active"
+        timeout: "1m"
+      - type: "route53"
+        target: "${dns-management.route53.hostedZoneId}"
+        expected: "active"
+        timeout: "1m"
+      - type: "rds"
+        target: "${database-global.rds.globalClusterIdentifier}"
+        expected: "available"
+        timeout: "10m"
+      - type: "eks"
+        target: "${kubernetes-us-east-1.eks.clusterName}"
+        expected: "active"
+        timeout: "10m"
+
+  - action: "output"
+    description: "Display deployment outputs"
+    outputs:
+      - "ipam-foundation.ipam.id"
+      - "ipam-foundation.ipam.poolArns"
+      - "vpc-us-east-1.vpc.id"
+      - "vpc-us-west-2.vpc.id"
+      - "vpc-eu-west-1.vpc.id"
+      - "container-registry.ecr.repositoryUrls"
+      - "dns-management.route53.nameServers"
+      - "dns-management.acm.certificateArns"
+      - "database-global.rds.clusterEndpoints"
+      - "kubernetes-us-east-1.eks.clusterEndpoint"
+      - "kubernetes-us-west-2.eks.clusterEndpoint"
+      - "kubernetes-eu-west-1.eks.clusterEndpoint"
+
+  - action: "info"
+    description: "Deployment completion information"
+    message: |
+      🎉 Complete run-all deployment successful!
+      
+      Infrastructure deployed across 3 regions:
+      - US East 1 (Primary)
+      - US West 2 (Secondary)
+      - EU West 1 (Europe)
+      
+      Components deployed:
+      ✅ IPAM - Centralized IP management
+      ✅ VPC - Multi-region networking (3 regions)
+      ✅ ECR - Global container registry with replication
+      ✅ Route53 - Global DNS management
+      ✅ ACM - SSL certificates (multi-region)
+      ✅ RDS - Global Aurora PostgreSQL database
+      ✅ EKS - Kubernetes clusters (3 regions)
+      
+      Next steps:
+      1. Configure kubectl for each cluster:
+         aws eks update-kubeconfig --region us-east-1 --name production-east
+         aws eks update-kubeconfig --region us-west-2 --name production-west
+         aws eks update-kubeconfig --region eu-west-1 --name production-eu
+      
+      2. Deploy applications to the clusters
+      3. Configure monitoring and observability
+      4. Set up CI/CD pipelines
+      
+      Total deployment time: ${deployment.totalDuration}
+      Successful stacks: ${deployment.successfulStacks}/${deployment.totalStacks}
+
+# Cleanup configuration
+cleanup:
+  order: "reverse-dependency"
+  parallel: true
+  confirmDestroy: true
+  retainData: false
+  
+# Resource monitoring and limits
+monitoring:
+  enableMetrics: true
+  metricsRetention: "30d"
+  alerting:
+    enabled: true
+    channels: ["email", "slack"]
+  
+resourceLimits:
+  maxInstances: 100
+  maxStorage: "10TB"
+  maxCPU: "1000"
+  maxMemory: "2TB"
+  budgetAlert: "$5000/month"
