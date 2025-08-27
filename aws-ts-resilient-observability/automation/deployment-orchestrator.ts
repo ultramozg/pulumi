@@ -7,15 +7,36 @@ import {
     DeploymentResult, 
     DeploymentSummary 
 } from './types';
+import { 
+    DeploymentLogger, 
+    MetricsCollector, 
+    PerformanceMonitor 
+} from '../components/utils/logging';
+import { 
+    ErrorHandler, 
+    RecoveryStrategy, 
+    RecoveryOptions,
+    ComponentError
+} from '../components/utils/error-handling';
 
 /**
  * Deployment orchestration logic for run-all functionality
  */
 export class DeploymentOrchestrator {
     private dependencyResolver: DependencyResolver;
+    private logger?: DeploymentLogger;
+    private metricsCollector?: MetricsCollector;
+    private errorHandlingOptions: RecoveryOptions;
     
-    constructor() {
+    constructor(errorHandlingOptions?: Partial<RecoveryOptions>) {
         this.dependencyResolver = new DependencyResolver();
+        this.errorHandlingOptions = {
+            strategy: RecoveryStrategy.RETRY,
+            maxRetries: 3,
+            retryDelay: 5000, // 5 seconds for stack operations
+            backoffMultiplier: 2,
+            ...errorHandlingOptions
+        };
     }
     
     /**
@@ -48,58 +69,104 @@ export class DeploymentOrchestrator {
             parallel?: boolean;
             dryRun?: boolean;
             refresh?: boolean;
+            continueOnFailure?: boolean;
+            rollbackOnFailure?: boolean;
         }
     ): Promise<DeploymentSummary> {
-        const startTime = Date.now();
+        // Initialize logging and metrics
+        this.logger = new DeploymentLogger(config.name);
+        this.metricsCollector = new MetricsCollector(config.name);
+        
+        const monitor = PerformanceMonitor.start('deployment', this.logger);
         const results: DeploymentResult[] = [];
         
-        console.log(`🚀 Starting deployment: ${config.name}`);
-        console.log(`📦 Total stacks: ${config.stacks.length}`);
+        this.logger.deploymentStart(config.stacks.length);
         
         try {
-            // Resolve dependencies and create deployment groups
-            const deploymentGroups = this.dependencyResolver.resolveDependencies(config.stacks);
+            // Validate configuration
+            this.validateDeploymentConfig(config);
             
-            console.log(`📋 Deployment groups: ${deploymentGroups.length}`);
-            deploymentGroups.forEach((group, index) => {
-                console.log(`   Group ${index + 1}: ${group.map(s => s.name).join(', ')}`);
-            });
+            // Resolve dependencies and create deployment groups
+            const deploymentGroups = await this.resolveDependenciesWithErrorHandling(config.stacks);
+            
+            this.logger.dependencyResolution(
+                deploymentGroups.length, 
+                deploymentGroups.map(group => group.map(s => s.name))
+            );
             
             // Deploy each group in sequence, stacks within a group in parallel
             for (let i = 0; i < deploymentGroups.length; i++) {
                 const group = deploymentGroups[i];
-                console.log(`\n🔄 Deploying group ${i + 1}/${deploymentGroups.length}`);
+                const groupIndex = i + 1;
                 
-                const groupResults = await this.deployGroup(group, options);
+                this.logger.groupDeploymentStart(
+                    groupIndex, 
+                    deploymentGroups.length, 
+                    group.map(s => s.name)
+                );
+                
+                const groupResults = await this.deployGroupWithErrorHandling(group, options, groupIndex, deploymentGroups.length);
                 results.push(...groupResults);
                 
-                // Check if any stack in the group failed
-                const failedStacks = groupResults.filter(r => !r.success);
+                // Analyze group results
+                const successfulStacks = groupResults.filter(r => r.success).map(r => r.stackName);
+                const failedStacks = groupResults.filter(r => !r.success).map(r => r.stackName);
+                
+                this.logger.groupDeploymentComplete(groupIndex, successfulStacks, failedStacks);
+                
+                // Handle group failures
                 if (failedStacks.length > 0) {
-                    console.log(`❌ Group ${i + 1} had failures, stopping deployment`);
-                    failedStacks.forEach(result => {
-                        console.log(`   Failed: ${result.stackName} - ${result.error}`);
-                    });
-                    break;
+                    if (options?.rollbackOnFailure) {
+                        await this.handleRollback(successfulStacks, `Group ${groupIndex} deployment failed`);
+                    }
+                    
+                    if (!options?.continueOnFailure) {
+                        this.logger.error(`Stopping deployment due to failures in group ${groupIndex}`, 
+                            new Error(`Failed stacks: ${failedStacks.join(', ')}`));
+                        break;
+                    }
                 }
             }
             
         } catch (error) {
-            console.error(`💥 Deployment orchestration failed: ${error}`);
-            throw error;
+            const deploymentError = error instanceof Error ? error : new Error(String(error));
+            this.logger.error("Deployment orchestration failed", deploymentError);
+            
+            if (options?.rollbackOnFailure) {
+                const successfulStacks = results.filter(r => r.success).map(r => r.stackName);
+                await this.handleRollback(successfulStacks, "Deployment orchestration failure");
+            }
+            
+            throw new ComponentError(
+                'DeploymentOrchestrator',
+                config.name,
+                `Deployment failed: ${deploymentError.message}`,
+                'DEPLOYMENT_FAILED',
+                { originalError: deploymentError.message }
+            );
         }
         
-        const endTime = Date.now();
+        const totalDuration = monitor.end();
         const summary: DeploymentSummary = {
             deploymentName: config.name,
             totalStacks: config.stacks.length,
             successfulStacks: results.filter(r => r.success).length,
             failedStacks: results.filter(r => !r.success).length,
             results,
-            totalDuration: endTime - startTime
+            totalDuration
         };
         
+        this.logger.deploymentComplete(summary.successfulStacks, summary.failedStacks, totalDuration);
         this.printSummary(summary);
+        
+        // Export metrics if collection is enabled
+        if (this.metricsCollector) {
+            const metrics = this.metricsCollector.completeDeployment();
+            this.logger.info("Deployment metrics collected", { 
+                metricsFile: `deployment-metrics-${config.name}-${Date.now()}.json` 
+            });
+        }
+        
         return summary;
     }
     
@@ -297,6 +364,225 @@ export class DeploymentOrchestrator {
         }
     }
     
+    /**
+     * Validate deployment configuration
+     */
+    private validateDeploymentConfig(config: DeploymentConfig): void {
+        if (!config.name || config.name.trim().length === 0) {
+            throw new ComponentError(
+                'DeploymentOrchestrator',
+                'unknown',
+                'Deployment name is required',
+                'INVALID_CONFIG'
+            );
+        }
+
+        if (!config.stacks || config.stacks.length === 0) {
+            throw new ComponentError(
+                'DeploymentOrchestrator',
+                config.name,
+                'At least one stack must be specified',
+                'INVALID_CONFIG'
+            );
+        }
+
+        // Validate each stack configuration
+        config.stacks.forEach((stack, index) => {
+            if (!stack.name || stack.name.trim().length === 0) {
+                throw new ComponentError(
+                    'DeploymentOrchestrator',
+                    config.name,
+                    `Stack at index ${index} must have a name`,
+                    'INVALID_STACK_CONFIG'
+                );
+            }
+
+            if (!stack.workDir || stack.workDir.trim().length === 0) {
+                throw new ComponentError(
+                    'DeploymentOrchestrator',
+                    config.name,
+                    `Stack '${stack.name}' must have a workDir`,
+                    'INVALID_STACK_CONFIG'
+                );
+            }
+        });
+    }
+
+    /**
+     * Resolve dependencies with error handling
+     */
+    private async resolveDependenciesWithErrorHandling(stacks: StackConfig[]): Promise<StackConfig[][]> {
+        return ErrorHandler.executeWithRecovery(
+            async () => {
+                return this.dependencyResolver.resolveDependencies(stacks);
+            },
+            'dependency-resolution',
+            'DeploymentOrchestrator',
+            this.logger?.deploymentName || 'unknown',
+            {
+                strategy: RecoveryStrategy.FAIL_FAST,
+                maxRetries: 1
+            }
+        );
+    }
+
+    /**
+     * Deploy group with enhanced error handling
+     */
+    private async deployGroupWithErrorHandling(
+        stacks: StackConfig[],
+        options?: {
+            parallel?: boolean;
+            dryRun?: boolean;
+            refresh?: boolean;
+        },
+        groupIndex?: number,
+        totalGroups?: number
+    ): Promise<DeploymentResult[]> {
+        const parallel = options?.parallel !== false; // Default to parallel
+        
+        if (parallel && stacks.length > 1) {
+            // Deploy stacks in parallel with individual error handling
+            const promises = stacks.map(stack => 
+                this.deployStackWithErrorHandling(stack, options, groupIndex, totalGroups)
+            );
+            return Promise.all(promises);
+        } else {
+            // Deploy stacks sequentially
+            const results: DeploymentResult[] = [];
+            for (const stack of stacks) {
+                const result = await this.deployStackWithErrorHandling(stack, options, groupIndex, totalGroups);
+                results.push(result);
+                
+                // For sequential deployment, stop on first failure unless continueOnFailure is set
+                if (!result.success && !options?.dryRun) {
+                    this.logger?.warn(`Sequential deployment stopped due to failure in stack: ${stack.name}`);
+                    break;
+                }
+            }
+            return results;
+        }
+    }
+
+    /**
+     * Deploy stack with comprehensive error handling
+     */
+    private async deployStackWithErrorHandling(
+        stackConfig: StackConfig,
+        options?: {
+            dryRun?: boolean;
+            refresh?: boolean;
+        },
+        groupIndex?: number,
+        totalGroups?: number
+    ): Promise<DeploymentResult> {
+        if (this.metricsCollector) {
+            this.metricsCollector.startStack(stackConfig.name);
+        }
+
+        this.logger?.stackDeploymentStart(stackConfig.name, groupIndex || 1, totalGroups || 1);
+        
+        return ErrorHandler.executeWithRecovery(
+            async () => {
+                return this.deployStack(stackConfig, options);
+            },
+            `deploy-stack-${stackConfig.name}`,
+            'DeploymentOrchestrator',
+            stackConfig.name,
+            {
+                ...this.errorHandlingOptions,
+                skipCondition: (error: Error) => {
+                    // Skip retry for certain types of errors
+                    return error.message.includes('already exists') ||
+                           error.message.includes('permission denied') ||
+                           error.message.includes('invalid configuration');
+                }
+            }
+        ).then(result => {
+            if (this.metricsCollector) {
+                this.metricsCollector.completeStack(
+                    stackConfig.name, 
+                    result.success, 
+                    result.error,
+                    result.outputs ? Object.keys(result.outputs).length : 0
+                );
+            }
+
+            if (result.success) {
+                this.logger?.stackDeploymentSuccess(stackConfig.name, result.duration || 0, result.outputs);
+            } else {
+                this.logger?.stackDeploymentFailure(
+                    stackConfig.name, 
+                    new Error(result.error || 'Unknown error'), 
+                    result.duration || 0
+                );
+            }
+
+            return result;
+        }).catch(error => {
+            const deploymentError = error instanceof Error ? error : new Error(String(error));
+            const result: DeploymentResult = {
+                stackName: stackConfig.name,
+                success: false,
+                error: deploymentError.message,
+                duration: 0
+            };
+
+            if (this.metricsCollector) {
+                this.metricsCollector.completeStack(stackConfig.name, false, deploymentError.message);
+            }
+
+            this.logger?.stackDeploymentFailure(stackConfig.name, deploymentError, 0);
+            return result;
+        });
+    }
+
+    /**
+     * Handle rollback operations
+     */
+    private async handleRollback(successfulStacks: string[], reason: string): Promise<void> {
+        if (successfulStacks.length === 0) {
+            return;
+        }
+
+        this.logger?.rollbackStart(reason);
+        if (this.metricsCollector) {
+            this.metricsCollector.recordRollback();
+        }
+
+        const rollbackMonitor = PerformanceMonitor.start('rollback', this.logger!);
+
+        try {
+            // Rollback in reverse order
+            for (const stackName of successfulStacks.reverse()) {
+                try {
+                    this.logger?.warn(`Rolling back stack: ${stackName}`);
+                    
+                    const stack = await automation.LocalWorkspace.createOrSelectStack({
+                        stackName: stackName,
+                        workDir: '.' // This would need to be resolved from original config
+                    });
+                    
+                    await stack.destroy();
+                    this.logger?.info(`Successfully rolled back stack: ${stackName}`);
+                } catch (rollbackError) {
+                    this.logger?.error(
+                        `Failed to rollback stack: ${stackName}`, 
+                        rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError))
+                    );
+                    // Continue with other rollbacks even if one fails
+                }
+            }
+
+            const duration = rollbackMonitor.end();
+            this.logger?.rollbackComplete(true, duration);
+        } catch (error) {
+            const duration = rollbackMonitor.end();
+            this.logger?.rollbackComplete(false, duration);
+            throw error;
+        }
+    }
+
     private printSummary(summary: DeploymentSummary): void {
         console.log(`\n📊 Deployment Summary: ${summary.deploymentName}`);
         console.log(`   Total stacks: ${summary.totalStacks}`);

@@ -9,6 +9,8 @@
         "test:integration": "jest --config jest.integration.config.js",
         "test:integration:watch": "jest --config jest.integration.config.js --watch",
         "test:integration:coverage": "jest --config jest.integration.config.js --coverage",
+        "test:error-handling": "jest --testPathPattern='(error-handling|logging|deployment-error-handling)' --verbose",
+        "test:error-recovery": "jest --testPathPattern='error-recovery' --config jest.integration.config.js --verbose",
         "test:all": "npm run test:unit && npm run test:integration",
         "automation": "ts-node automation/cli.ts",
         "deploy": "npm run automation deploy",
