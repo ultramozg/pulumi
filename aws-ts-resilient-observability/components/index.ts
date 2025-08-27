@@ -18,3 +18,6 @@ export * from "./eks";
 
 // Existing components
 export * from "./transitGateway";
+
+// Component utilities
+export * from "./utils";
