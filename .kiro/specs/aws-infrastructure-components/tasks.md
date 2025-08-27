@@ -46,7 +46,7 @@
   - Write unit tests in aws-ts-resilient-observability/components/route53/route53.test.ts
   - _Requirements: 8.1, 8.2, 8.3_
 
-- [ ] 7. Implement ACM component for certificate management
+- [x] 7. Implement ACM component for certificate management
   - Research existing Pulumi ACM packages and evaluate for reuse
   - Create ACM component class in aws-ts-resilient-observability/components/acm/index.ts
   - Implement certificate validation functionality (DNS and email)
