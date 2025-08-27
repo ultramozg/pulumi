@@ -54,8 +54,8 @@
   - Write unit tests in aws-ts-resilient-observability/components/acm/acm.test.ts
   - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-- [ ] 8. Build RDS Global Database component
-  - Implement RDS Global Database component class in aws-ts-resilient-observability/components/rds/index.ts
+- [x] 8. Build RDS Global Database component
+  - Implement RDS Global Database component class in aws-ts-resilient-observability/components/rds/index.ts if there no such package available
   - Add subnet group creation and security group management
   - Implement configurable security group rules
   - Add support for Aurora MySQL and PostgreSQL engines

@@ -12,8 +12,8 @@ export * from "./ecr";
 export * from "./ipam";
 export * from "./vpc";
 export * from "./route53";
-// export * from "./acm";
-// export * from "./rds";
+export * from "./acm";
+export * from "./rds";
 // export * from "./eks";
 
 // Existing components
