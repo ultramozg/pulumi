@@ -1,18 +1,5 @@
 import * as pulumi from "@pulumi/pulumi";
 import { VPCComponent, VPCComponentArgs } from "./index";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import test from "node:test";
-import { beforeEach } from "node:test";
-import { describe } from "node:test";
 
 // Mock Pulumi for testing
 pulumi.runtime.setMocks({

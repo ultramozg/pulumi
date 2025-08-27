@@ -14,7 +14,7 @@ export * from "./vpc";
 export * from "./route53";
 export * from "./acm";
 export * from "./rds";
-// export * from "./eks";
+export * from "./eks";
 
 // Existing components
 export * from "./transitGateway";

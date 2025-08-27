@@ -62,7 +62,7 @@
   - Write unit tests in aws-ts-resilient-observability/components/rds/rds.test.ts
   - _Requirements: 10.1, 10.2, 10.3_
 
-- [ ] 9. Create EKS component with auto mode support
+- [x] 9. Create EKS component with auto mode support
   - Implement EKS component class in aws-ts-resilient-observability/components/eks/index.ts
   - Add configurable addon deployment functionality
   - Implement EC2NodeClass and NodePool configuration
