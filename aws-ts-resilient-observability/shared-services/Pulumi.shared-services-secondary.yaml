@@ -1,0 +1,11 @@
+config:
+  aws:region: us-west-2
+  aws:assumeRole:
+    roleArn: ${SHARED_SERVICES_ROLE_ARN}
+    sessionName: pulumi-shared-services-fallback
+  shared-services:primaryRegion: us-east-1
+  shared-services:secondaryRegion: us-west-2
+  shared-services:transitGatewayAsn: 64513
+  shared-services:hubVpcCidr: 10.2.0.0/16
+  shared-services:eksClusterName: shared-monitoring-cluster-fallback
+  shared-services:isPrimary: false

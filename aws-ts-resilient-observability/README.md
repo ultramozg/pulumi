@@ -21,13 +21,45 @@ This is high overview diagram, later on it maybe will be updated.
 
 ## Architecture Overview
 
+### Multi-Region Deployment
+
+The platform now supports deployment across two regions using a multi-site approach:
+
+- **Primary Region**: us-east-1 (default)
+- **Secondary Region**: us-west-2 (default)
+
 ### AWS Accounts
 
-| Account Role        | Purpose                                  |
-|---------------------|------------------------------------------|
-| `shared`            | Observability platform, central EKS,     |
-|                     | VPC IPAM, Transit Gateway, RAM shares    |
-| `workload`          | Workloads (by region)                    |
+| Account Role        | Purpose                                  | Regions |
+|---------------------|------------------------------------------|---------|
+| `shared-services`   | Observability platform, central EKS,     | Both    |
+|                     | VPC IPAM, Transit Gateway, RAM shares    |         |
+| `workloads`         | Application workloads, databases         | Both    |
+
+### Infrastructure Components by Account
+
+#### Shared Services Account
+- **Primary Region (us-east-1)**:
+  - Transit Gateway (ASN: 64512)
+  - Hub VPC (10.0.0.0/16)
+  - Shared EKS Cluster for monitoring
+- **Secondary Region (us-west-2)**:
+  - Transit Gateway (ASN: 64513)
+  - Hub VPC (10.2.0.0/16)
+  - Shared EKS Cluster for monitoring
+
+#### Workloads Account
+- **Primary Region (us-east-1)**:
+  - Spoke VPC (10.1.0.0/16)
+  - Transit Gateway Attachments
+  - Workload EKS Cluster
+  - RDS Aurora Global Database (Primary)
+  - Route 53 Failover Records
+- **Secondary Region (us-west-2)**:
+  - Spoke VPC (10.3.0.0/16)
+  - Transit Gateway Attachments
+  - Workload EKS Cluster
+  - RDS Aurora Global Database (Secondary)
 
 ### Core Components
 
@@ -81,5 +113,30 @@ This project implements the **Multi-Site DR** model:
 |------------|-------------------------------------|
 | **RTO**    | < 5 minutes                         |
 | **RPO**    | < 1 minute (via Global RDS + Kafka) |
+
+## Quick Start
+
+### Prerequisites
+1. Two AWS accounts (shared-services and workloads)
+2. IAM roles configured for cross-account access
+3. Environment variables set (see `.env.template`)
+
+### Deployment
+```bash
+# Copy and configure environment variables
+cp .env.template .env
+# Edit .env with your account IDs and role ARNs
+
+# Install dependencies
+npm install
+
+# Preview the deployment
+npm run preview:multi-region
+
+# Deploy all infrastructure
+npm run deploy:multi-region
+```
+
+For detailed deployment instructions, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md).
 
 ---
