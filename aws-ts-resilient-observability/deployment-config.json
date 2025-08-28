@@ -1,0 +1,188 @@
+{
+  "name": "multi-region-resilient-observability",
+  "description": "Multi-region, multi-account deployment with shared services and workloads",
+  "defaultRegion": "us-east-1",
+  "defaultTags": {
+    "Project": "resilient-observability",
+    "Environment": "production",
+    "ManagedBy": "pulumi"
+  },
+  "stacks": [
+    {
+      "name": "shared-services-primary",
+      "workDir": "./shared-services",
+      "stackName": "shared-services",
+      "configFile": "Pulumi.shared-services.yaml",
+      "description": "Shared services in primary region (us-east-1)",
+      "components": [
+        {
+          "type": "transit-gateway",
+          "name": "primary-tgw",
+          "config": {
+            "region": "us-east-1",
+            "asn": 64512
+          }
+        },
+        {
+          "type": "hub-vpc",
+          "name": "primary-hub-vpc",
+          "config": {
+            "region": "us-east-1",
+            "cidrBlock": "10.0.0.0/16"
+          }
+        },
+        {
+          "type": "shared-eks",
+          "name": "primary-shared-eks",
+          "config": {
+            "region": "us-east-1",
+            "clusterName": "shared-monitoring-cluster"
+          }
+        }
+      ],
+      "tags": {
+        "Region": "us-east-1",
+        "AccountType": "shared-services",
+        "IsPrimary": "true"
+      }
+    },
+    {
+      "name": "shared-services-secondary",
+      "workDir": "./shared-services",
+      "stackName": "shared-services-secondary",
+      "configFile": "Pulumi.shared-services-secondary.yaml",
+      "description": "Shared services in secondary region (us-west-2)",
+      "dependencies": ["shared-services-primary"],
+      "components": [
+        {
+          "type": "transit-gateway",
+          "name": "secondary-tgw",
+          "config": {
+            "region": "us-west-2",
+            "asn": 64513
+          }
+        },
+        {
+          "type": "hub-vpc",
+          "name": "secondary-hub-vpc",
+          "config": {
+            "region": "us-west-2",
+            "cidrBlock": "10.2.0.0/16"
+          }
+        },
+        {
+          "type": "shared-eks",
+          "name": "secondary-shared-eks",
+          "config": {
+            "region": "us-west-2",
+            "clusterName": "shared-monitoring-cluster-secondary"
+          }
+        }
+      ],
+      "tags": {
+        "Region": "us-west-2",
+        "AccountType": "shared-services",
+        "IsPrimary": "false"
+      }
+    },
+    {
+      "name": "workloads-primary",
+      "workDir": "./workloads",
+      "stackName": "workloads",
+      "configFile": "Pulumi.workload.yaml",
+      "description": "Workloads in primary region (us-east-1)",
+      "dependencies": ["shared-services-primary"],
+      "components": [
+        {
+          "type": "spoke-vpc",
+          "name": "primary-spoke-vpc",
+          "config": {
+            "region": "us-east-1",
+            "cidrBlock": "10.1.0.0/16"
+          }
+        },
+        {
+          "type": "workload-eks",
+          "name": "primary-workload-eks",
+          "config": {
+            "region": "us-east-1",
+            "clusterName": "workload-cluster"
+          }
+        },
+        {
+          "type": "rds-global",
+          "name": "primary-rds-global",
+          "config": {
+            "region": "us-east-1",
+            "globalClusterIdentifier": "workload-global-db",
+            "isPrimary": true
+          }
+        },
+        {
+          "type": "route53",
+          "name": "route53-failover",
+          "config": {
+            "hostedZone": "workloads.example.com"
+          }
+        }
+      ],
+      "tags": {
+        "Region": "us-east-1",
+        "AccountType": "workloads",
+        "IsPrimary": "true"
+      }
+    },
+    {
+      "name": "workloads-secondary",
+      "workDir": "./workloads",
+      "stackName": "workloads-secondary",
+      "configFile": "Pulumi.workload-secondary.yaml",
+      "description": "Workloads in secondary region (us-west-2)",
+      "dependencies": ["shared-services-secondary", "workloads-primary"],
+      "components": [
+        {
+          "type": "spoke-vpc",
+          "name": "secondary-spoke-vpc",
+          "config": {
+            "region": "us-west-2",
+            "cidrBlock": "10.3.0.0/16"
+          }
+        },
+        {
+          "type": "workload-eks",
+          "name": "secondary-workload-eks",
+          "config": {
+            "region": "us-west-2",
+            "clusterName": "workload-cluster-secondary"
+          }
+        },
+        {
+          "type": "rds-global",
+          "name": "secondary-rds-global",
+          "config": {
+            "region": "us-west-2",
+            "globalClusterIdentifier": "workload-global-db",
+            "isPrimary": false
+          }
+        }
+      ],
+      "tags": {
+        "Region": "us-west-2",
+        "AccountType": "workloads",
+        "IsPrimary": "false"
+      }
+    }
+  ],
+  "environmentVariables": {
+    "SHARED_SERVICES_ROLE_ARN": "arn:aws:iam::SHARED-SERVICES-ACCOUNT-ID:role/PulumiExecutionRole",
+    "SHARED_SERVICES_ACCOUNT_ID": "SHARED-SERVICES-ACCOUNT-ID",
+    "WORKLOADS_ROLE_ARN": "arn:aws:iam::WORKLOADS-ACCOUNT-ID:role/PulumiExecutionRole",
+    "WORKLOADS_ACCOUNT_ID": "WORKLOADS-ACCOUNT-ID"
+  },
+  "deploymentOptions": {
+    "parallel": false,
+    "continueOnFailure": false,
+    "rollbackOnFailure": true,
+    "refresh": true
+  }
+}

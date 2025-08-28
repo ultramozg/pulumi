@@ -21,7 +21,10 @@
         "deploy-components": "npm run automation deploy-components",
         "validate": "npm run automation validate",
         "status": "npm run automation status",
-        "rollback": "npm run automation rollback"
+        "rollback": "npm run automation rollback",
+        "deploy:multi-region": "ts-node deploy.ts deploy",
+        "destroy:multi-region": "ts-node deploy.ts destroy",
+        "preview:multi-region": "ts-node deploy.ts preview"
     },
     "devDependencies": {
         "@types/jest": "^29.5.0",
