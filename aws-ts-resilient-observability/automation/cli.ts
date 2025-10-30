@@ -78,7 +78,20 @@ class AutomationCLI {
         
         console.log(`🚀 Deploying infrastructure from: ${configPath}`);
         
-        const summary = await this.automation.deployFromConfig(configPath, {
+        // Load config and filter stacks if specified
+        const config = ConfigManager.loadConfig(configPath);
+        if (options.stacks) {
+            const stacksToDeploy = options.stacks.split(',').map((s: string) => s.trim());
+            config.stacks = config.stacks.filter(stack => stacksToDeploy.includes(stack.name));
+            
+            if (config.stacks.length === 0) {
+                throw new Error(`No matching stacks found. Available stacks: ${ConfigManager.loadConfig(configPath).stacks.map(s => s.name).join(', ')}`);
+            }
+            
+            console.log(`📦 Deploying only: ${config.stacks.map(s => s.name).join(', ')}`);
+        }
+        
+        const summary = await this.automation.deployAll(config, {
             parallel: options.parallel !== false,
             refresh: options.refresh === true,
             continueOnFailure: options.continueOnFailure === true,
@@ -340,7 +353,7 @@ class AutomationCLI {
             if (arg.startsWith('--')) {
                 const key = arg.slice(2);
                 
-                if (['config', 'region', 'components', 'exclude'].includes(key) && i + 1 < args.length) {
+                if (['config', 'region', 'components', 'exclude', 'stacks'].includes(key) && i + 1 < args.length) {
                     options[key] = args[i + 1];
                     i++; // Skip next argument
                 } else if (key === 'no-parallel') {
@@ -395,6 +408,7 @@ Commands:
 
 Options:
   --config <path>           Path to deployment configuration file
+  --stacks <list>           Comma-separated list of stack names to deploy
   --region <region>         AWS region for deployment (default: us-east-1)
   --components <list>       Comma-separated list of components to deploy
   --exclude <list>          Comma-separated list of components to exclude
@@ -406,10 +420,16 @@ Options:
 
 Examples:
   # Deploy from configuration file
-  automation deploy --config deployment.yaml --rollback-on-failure
+  automation deploy --config deployment-config.json --rollback-on-failure
+  
+  # Deploy only shared services stacks
+  automation deploy --config deployment-config.json --stacks shared-services-primary
+  
+  # Deploy both shared services stacks
+  automation deploy --config deployment-config.json --stacks shared-services-primary,shared-services-secondary
   
   # Preview changes with refresh
-  automation preview --config deployment.yaml --refresh
+  automation preview --config deployment-config.json --refresh
   
   # Deploy all components with default settings
   automation run-all --region us-west-2
