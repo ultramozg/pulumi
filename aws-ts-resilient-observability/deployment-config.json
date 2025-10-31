@@ -175,9 +175,7 @@
   ],
   "environmentVariables": {
     "SHARED_SERVICES_ROLE_ARN": "arn:aws:iam::SHARED-SERVICES-ACCOUNT-ID:role/PulumiExecutionRole",
-    "SHARED_SERVICES_ACCOUNT_ID": "SHARED-SERVICES-ACCOUNT-ID",
-    "WORKLOADS_ROLE_ARN": "arn:aws:iam::WORKLOADS-ACCOUNT-ID:role/PulumiExecutionRole",
-    "WORKLOADS_ACCOUNT_ID": "WORKLOADS-ACCOUNT-ID"
+    "WORKLOADS_ROLE_ARN": "arn:aws:iam::WORKLOADS-ACCOUNT-ID:role/PulumiExecutionRole"
   },
   "deploymentOptions": {
     "parallel": false,

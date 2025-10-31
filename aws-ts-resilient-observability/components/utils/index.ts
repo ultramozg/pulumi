@@ -9,3 +9,4 @@ export * from "./validation";
 export * from "./output-sharing";
 export * from "./error-handling";
 export * from "./logging";
+export * from "./aws-helpers";

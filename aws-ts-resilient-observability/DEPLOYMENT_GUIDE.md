@@ -90,10 +90,10 @@ Set the following environment variables before deployment:
 
 ```bash
 export SHARED_SERVICES_ROLE_ARN="arn:aws:iam::SHARED-SERVICES-ACCOUNT-ID:role/PulumiExecutionRole"
-export SHARED_SERVICES_ACCOUNT_ID="SHARED-SERVICES-ACCOUNT-ID"
 export WORKLOADS_ROLE_ARN="arn:aws:iam::WORKLOADS-ACCOUNT-ID:role/PulumiExecutionRole"
-export WORKLOADS_ACCOUNT_ID="WORKLOADS-ACCOUNT-ID"
 ```
+
+**Note**: Account IDs are automatically extracted from the role ARNs when needed using the built-in `extractAccountIdFromArn()` utility function. This eliminates the need for separate `SHARED_SERVICES_ACCOUNT_ID` and `WORKLOADS_ACCOUNT_ID` environment variables.
 
 ### 4. Dependencies
 Install required dependencies:
