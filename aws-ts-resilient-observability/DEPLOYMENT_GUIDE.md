@@ -85,15 +85,32 @@ Both roles need the following managed policies:
 - `PowerUserAccess`
 - `IAMFullAccess` (for creating service roles)
 
-### 3. Environment Variables
-Set the following environment variables before deployment:
+### 3. Role Configuration
+Role ARNs are configured directly in each stack configuration in `deployment-config.json`. Update the role ARNs with your actual values:
 
-```bash
-export SHARED_SERVICES_ROLE_ARN="arn:aws:iam::SHARED-SERVICES-ACCOUNT-ID:role/PulumiExecutionRole"
-export WORKLOADS_ROLE_ARN="arn:aws:iam::WORKLOADS-ACCOUNT-ID:role/PulumiExecutionRole"
+```json
+{
+  "stacks": [
+    {
+      "name": "shared-services-primary",
+      "roleArn": "arn:aws:iam::123456789012:role/PulumiExecutionRole",
+      ...
+    },
+    {
+      "name": "workloads-primary", 
+      "roleArn": "arn:aws:iam::987654321098:role/PulumiExecutionRole",
+      ...
+    }
+  ]
+}
 ```
 
-**Note**: Account IDs are automatically extracted from the role ARNs when needed using the built-in `extractAccountIdFromArn()` utility function. This eliminates the need for separate `SHARED_SERVICES_ACCOUNT_ID` and `WORKLOADS_ACCOUNT_ID` environment variables.
+**Benefits of this approach:**
+- **Minimal configuration** - just role ARNs where needed
+- **Uses default AWS credentials** - leverages your existing AWS CLI/SDK setup
+- **Automatic role assumption** - Pulumi assumes roles only when specified
+- **Built-in validation** - Role access is validated before deployment
+- **Account IDs extracted automatically** - from role ARNs when needed
 
 ### 4. Dependencies
 Install required dependencies:

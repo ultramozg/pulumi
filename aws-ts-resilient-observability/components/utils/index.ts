@@ -10,3 +10,4 @@ export * from "./output-sharing";
 export * from "./error-handling";
 export * from "./logging";
 export * from "./aws-helpers";
+export * from "./aws-provider";

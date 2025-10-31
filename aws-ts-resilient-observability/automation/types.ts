@@ -12,16 +12,27 @@ export interface ComponentConfig {
 export interface StackConfig {
     name: string;
     workDir: string;
+    stackName?: string;
+    configFile?: string;
+    description?: string;
     dependencies?: string[];
     components: ComponentConfig[];
     tags?: Record<string, string>;
+    roleArn?: string;
 }
 
 export interface DeploymentConfig {
     name: string;
+    description?: string;
     defaultRegion?: string;
     defaultTags?: Record<string, string>;
     stacks: StackConfig[];
+    deploymentOptions?: {
+        parallel?: boolean;
+        continueOnFailure?: boolean;
+        rollbackOnFailure?: boolean;
+        refresh?: boolean;
+    };
 }
 
 export interface DeploymentResult {

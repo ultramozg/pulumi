@@ -5,8 +5,9 @@ import {
     DeploymentConfig, 
     StackConfig, 
     DeploymentResult, 
-    DeploymentSummary 
+    DeploymentSummary
 } from './types';
+import { validateRoleAssumption } from '../components/utils/aws-provider';
 import { 
     DeploymentLogger, 
     MetricsCollector, 
@@ -85,6 +86,9 @@ export class DeploymentOrchestrator {
         try {
             // Validate configuration
             this.validateDeploymentConfig(config);
+            
+            // Validate role access
+            await this.validateRoleAccess(config);
             
             // Resolve dependencies and create deployment groups
             const deploymentGroups = await this.resolveDependenciesWithErrorHandling(config.stacks);
@@ -380,6 +384,45 @@ export class DeploymentOrchestrator {
         }
     }
     
+    /**
+     * Validate role access before deployment
+     */
+    private async validateRoleAccess(config: DeploymentConfig): Promise<void> {
+        // Collect unique role ARNs from stacks
+        const roleArns = new Set<string>();
+        config.stacks.forEach(stack => {
+            if (stack.roleArn) {
+                roleArns.add(stack.roleArn);
+            }
+        });
+
+        if (roleArns.size === 0) {
+            this.logger?.info('No role ARNs found, using default AWS credentials');
+            return;
+        }
+
+        this.logger?.info(`Validating role access for ${roleArns.size} roles...`);
+        
+        const validationPromises = Array.from(roleArns).map(async (roleArn) => {
+            try {
+                await validateRoleAssumption(roleArn);
+                this.logger?.info(`✅ Role access validated: ${roleArn}`);
+            } catch (error) {
+                const errorMessage = `❌ Role access validation failed: ${roleArn} - ${error}`;
+                this.logger?.error(errorMessage, error instanceof Error ? error : new Error(String(error)));
+                throw new ComponentError(
+                    'DeploymentOrchestrator',
+                    config.name,
+                    errorMessage,
+                    'ROLE_ACCESS_FAILED'
+                );
+            }
+        });
+
+        await Promise.all(validationPromises);
+        this.logger?.info('All role access validations passed');
+    }
+
     /**
      * Validate deployment configuration
      */
