@@ -457,11 +457,11 @@ export class DeploymentOrchestrator {
         // Set common configuration
         configValues['aws:region'] = { value: stackConfig.tags?.Region || deploymentConfig.defaultRegion || 'us-east-1' };
         
+        // Extract just the directory name from workDir, handling both relative and absolute paths
+        const namespace = this.extractNamespaceFromWorkDir(stackConfig.workDir);
+        
         // Extract configuration from the stack's components in deployment config
         if (stackConfig.components) {
-            // Extract just the directory name from workDir (e.g., "./shared-services" -> "shared-services")
-            const namespace = stackConfig.workDir.replace(/^\.\//, '');
-            
             stackConfig.components.forEach(component => {
                 if (component.config) {
                     // Convert component config to Pulumi config format
@@ -473,7 +473,6 @@ export class DeploymentOrchestrator {
         }
         
         // Set additional stack-level configuration
-        const namespace = stackConfig.workDir.replace(/^\.\//, '');
         configValues[`${namespace}:defaultRegion`] = { 
             value: deploymentConfig.defaultRegion || 'us-east-1' 
         };
@@ -484,6 +483,25 @@ export class DeploymentOrchestrator {
                 configValues[`${namespace}:${key.toLowerCase()}`] = { value };
             });
         }
+    }
+
+    /**
+     * Extract namespace from workDir, handling both relative and absolute paths
+     */
+    private extractNamespaceFromWorkDir(workDir: string): string {
+        // Handle relative paths like "./shared-services"
+        if (workDir.startsWith('./')) {
+            return workDir.replace(/^\.\//, '');
+        }
+        
+        // Handle absolute paths by extracting the last directory name
+        if (workDir.includes('/')) {
+            const parts = workDir.split('/');
+            return parts[parts.length - 1];
+        }
+        
+        // Handle simple directory names
+        return workDir;
     }
 
     /**
