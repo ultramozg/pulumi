@@ -71,8 +71,8 @@ export interface EKSComponentArgs extends BaseComponentArgs {
     version?: string;
     autoModeEnabled?: boolean;
     addons?: string[];
-    vpcId?: string;
-    subnetIds?: string[];
+    vpcId?: pulumi.Input<string>;
+    subnetIds?: pulumi.Input<string[]>;
     endpointConfig?: {
         privateAccess?: boolean;
         publicAccess?: boolean;
@@ -198,8 +198,9 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
      * Create EKS cluster service role
      */
     private createClusterRole(): aws.iam.Role {
+        const roleName = `${this.getResourceName()}-cluster-role`;
         const role = new aws.iam.Role(
-            `${this.urn}-cluster-role`,
+            roleName,
             {
                 assumeRolePolicy: JSON.stringify({
                     Version: "2012-10-17",
@@ -218,7 +219,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
         // Attach required policies
         new aws.iam.RolePolicyAttachment(
-            `${this.urn}-cluster-policy`,
+            `${this.getResourceName()}-cluster-policy`,
             {
                 role: role.name,
                 policyArn: "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
@@ -233,8 +234,9 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
      * Create EKS node group service role
      */
     private createNodeRole(): aws.iam.Role {
+        const roleName = `${this.getResourceName()}-node-role`;
         const role = new aws.iam.Role(
-            `${this.urn}-node-role`,
+            roleName,
             {
                 assumeRolePolicy: JSON.stringify({
                     Version: "2012-10-17",
@@ -260,7 +262,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
         policies.forEach((policyArn, index) => {
             new aws.iam.RolePolicyAttachment(
-                `${this.urn}-node-policy-${index}`,
+                `${this.getResourceName()}-node-policy-${index}`,
                 {
                     role: role.name,
                     policyArn: policyArn
@@ -310,7 +312,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         }
 
         return new aws.eks.Cluster(
-            `${this.urn}-cluster`,
+            `${this.getResourceName()}-cluster`,
             clusterConfig,
             {
                 parent: this,
@@ -414,7 +416,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
         args.nodeGroups.forEach(nodeGroupConfig => {
             const nodeGroup = new aws.eks.NodeGroup(
-                `${this.urn}-${nodeGroupConfig.name}`,
+                `${this.getResourceName()}-${nodeGroupConfig.name}`,
                 {
                     clusterName: this.cluster.name,
                     nodeGroupName: nodeGroupConfig.name,
@@ -446,7 +448,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
         args.addons.forEach(addonName => {
             new aws.eks.Addon(
-                `${this.urn}-addon-${addonName}`,
+                `${this.getResourceName()}-addon-${addonName}`,
                 {
                     clusterName: this.cluster.name,
                     addonName: addonName,

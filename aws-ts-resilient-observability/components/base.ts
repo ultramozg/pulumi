@@ -319,7 +319,9 @@ export abstract class BaseAWSComponent extends pulumi.ComponentResource {
      * Get component name for error reporting
      */
     protected getResourceName(): string {
-        return this.urn.apply ? this.urn.apply(urn => urn.split('::').pop() || 'unknown') as any : 'unknown';
+        // Use the constructor name and a simple identifier instead of urn
+        // since urn is a Pulumi Output and can't be used synchronously
+        return `${this.constructor.name.toLowerCase()}-${this.region}`;
     }
 
     /**

@@ -108,13 +108,14 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
      * Create the main IPAM instance
      */
     private createIPAM(args: IPAMComponentArgs): aws.ec2.VpcIpam {
+        const resourceName = this.getResourceName();
         return new aws.ec2.VpcIpam(
-            `${this.urn}-ipam`,
+            `${resourceName}-ipam`,
             {
-                description: `IPAM managed by ${this.urn}`,
+                description: `IPAM managed by ${resourceName}`,
                 operatingRegions: args.operatingRegions.map(region => ({ regionName: region })),
                 tags: this.mergeTags({
-                    Name: `${this.urn}-ipam`,
+                    Name: `${resourceName}-ipam`,
                     Purpose: "CentralizedIPManagement"
                 })
             },
@@ -128,13 +129,14 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
      * Create IPAM scope for organization-level resource sharing
      */
     private createIPAMScope(args: IPAMComponentArgs): aws.ec2.VpcIpamScope {
+        const resourceName = this.getResourceName();
         return new aws.ec2.VpcIpamScope(
-            `${this.urn}-scope`,
+            `${resourceName}-scope`,
             {
                 ipamId: this.ipam.id,
-                description: `IPAM scope for ${this.urn}`,
+                description: `IPAM scope for ${resourceName}`,
                 tags: this.mergeTags({
-                    Name: `${this.urn}-scope`,
+                    Name: `${resourceName}-scope`,
                     Purpose: "OrganizationSharing"
                 })
             },
@@ -153,15 +155,16 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
             const regionProvider = this.createProvider(region);
 
             // Create pool for this region
+            const resourceName = this.getResourceName();
             const pool = new aws.ec2.VpcIpamPool(
-                `${this.urn}-pool-${region}`,
+                `${resourceName}-pool-${region}`,
                 {
                     ipamScopeId: this.scope.id,
                     description: `IPAM pool for region ${region}`,
                     addressFamily: "ipv4",
                     locale: region,
                     tags: this.mergeTags({
-                        Name: `${this.urn}-pool-${region}`,
+                        Name: `${resourceName}-pool-${region}`,
                         Region: region,
                         Purpose: "RegionalIPAllocation"
                     })
@@ -175,7 +178,7 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
             // Add CIDR blocks to the pool
             args.cidrBlocks.forEach((cidr, index) => {
                 new aws.ec2.VpcIpamPoolCidr(
-                    `${this.urn}-pool-cidr-${region}-${index}`,
+                    `${resourceName}-pool-cidr-${region}-${index}`,
                     {
                         ipamPoolId: pool.id,
                         cidr: cidr
@@ -195,14 +198,15 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
      * Set up organization sharing for IPAM resources
      */
     private setupOrganizationSharing(args: IPAMComponentArgs): void {
+        const resourceName = this.getResourceName();
         // Share IPAM with organization
         const resourceShare = new aws.ram.ResourceShare(
-            `${this.urn}-ipam-share`,
+            `${resourceName}-ipam-share`,
             {
-                name: `${this.urn}-ipam-share`,
+                name: `${resourceName}-ipam-share`,
                 allowExternalPrincipals: false,
                 tags: this.mergeTags({
-                    Name: `${this.urn}-ipam-share`,
+                    Name: `${resourceName}-ipam-share`,
                     Purpose: "OrganizationSharing"
                 })
             },
@@ -213,7 +217,7 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
 
         // Associate IPAM with the resource share
         new aws.ram.ResourceAssociation(
-            `${this.urn}-ipam-association`,
+            `${resourceName}-ipam-association`,
             {
                 resourceArn: this.ipam.arn,
                 resourceShareArn: resourceShare.arn
@@ -226,7 +230,7 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
         // Share with organization
         const organizationId = pulumi.output(aws.organizations.getOrganization()).id;
         new aws.ram.PrincipalAssociation(
-            `${this.urn}-org-association`,
+            `${resourceName}-org-association`,
             {
                 principal: organizationId,
                 resourceShareArn: resourceShare.arn

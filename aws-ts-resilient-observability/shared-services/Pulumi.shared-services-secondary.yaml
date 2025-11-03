@@ -5,7 +5,23 @@ config:
     sessionName: pulumi-shared-services-fallback
   shared-services:primaryRegion: us-east-1
   shared-services:secondaryRegion: us-west-2
-  shared-services:transitGatewayAsn: 64513
+  shared-services:transitGatewayAsn: "64513"
   shared-services:hubVpcCidr: 10.2.0.0/16
   shared-services:eksClusterName: shared-monitoring-cluster-fallback
-  shared-services:isPrimary: false
+  shared-services:isPrimary: "false"
+  shared-services:accounttype: shared-services
+  shared-services:asn: "64513"
+  shared-services:cidrBlock: 10.2.0.0/16
+  shared-services:clusterName: shared-monitoring-cluster-secondary
+  shared-services:defaultRegion: us-east-1
+  shared-services:environment: production
+  shared-services:isprimary: "false"
+  shared-services:managedby: pulumi
+  shared-services:project: resilient-observability
+  shared-services:region: us-west-2
+  tags:AccountType: shared-services
+  tags:Environment: production
+  tags:IsPrimary: "false"
+  tags:ManagedBy: pulumi
+  tags:Project: resilient-observability
+  tags:Region: us-west-2

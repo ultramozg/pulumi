@@ -68,8 +68,8 @@ const hubVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`hub-vpc-attach
 const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
     region: currentRegion,
     clusterName: eksClusterName,
-    // vpcId: hubVpc.vpcId,
-    // subnetIds: hubVpc.getSubnetIdsByType('private'),
+    vpcId: hubVpc.vpcId,
+    subnetIds: hubVpc.getSubnetIdsByType('private'),
     autoModeEnabled: false,
     addons: ["vpc-cni", "coredns", "kube-proxy", "aws-load-balancer-controller"],
     nodeGroups: [

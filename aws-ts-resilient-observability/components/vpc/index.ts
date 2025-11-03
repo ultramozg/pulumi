@@ -276,15 +276,16 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 // Calculate CIDR block for this subnet with proper offset
                 const cidrBlock = this.calculateSubnetCidrWithOffset(spec, subnetOffset + azIndex);
 
+                const resourceName = this.getResourceName();
                 const subnet = new aws.ec2.Subnet(
-                    `${this.urn}-subnet-${subnetKey}`,
+                    `${resourceName}-subnet-${subnetKey}`,
                     {
                         vpcId: this.vpc.id,
                         cidrBlock: cidrBlock,
                         availabilityZone: azs.apply(zones => zones[azIndex]),
                         mapPublicIpOnLaunch: spec.type === 'public',
                         tags: this.mergeTags({
-                            Name: `${this.urn}-subnet-${subnetKey}`,
+                            Name: `${resourceName}-subnet-${subnetKey}`,
                             Type: spec.type,
                             Purpose: `${spec.type}Networking`
                         })
@@ -355,12 +356,13 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
         const hasPublicSubnets = Object.values(args.subnets).some(spec => spec.type === 'public');
 
         if (hasPublicSubnets && this.internetGateway) {
+            const resourceName = this.getResourceName();
             const publicRouteTable = new aws.ec2.RouteTable(
-                `${this.urn}-rt-public`,
+                `${resourceName}-rt-public`,
                 {
                     vpcId: this.vpc.id,
                     tags: this.mergeTags({
-                        Name: `${this.urn}-rt-public`,
+                        Name: `${resourceName}-rt-public`,
                         Type: "public"
                     })
                 },
@@ -372,7 +374,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
 
             // Add route to Internet Gateway
             new aws.ec2.Route(
-                `${this.urn}-route-public-igw`,
+                `${resourceName}-route-public-igw`,
                 {
                     routeTableId: publicRouteTable.id,
                     destinationCidrBlock: "0.0.0.0/0",
@@ -392,8 +394,9 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 const spec = args.subnets[subnetName];
 
                 if (spec && spec.type === 'public') {
+                    const resourceName = this.getResourceName();
                     new aws.ec2.RouteTableAssociation(
-                        `${this.urn}-rta-${subnetKey}`,
+                        `${resourceName}-rta-${subnetKey}`,
                         {
                             subnetId: subnet.id,
                             routeTableId: publicRouteTable.id
@@ -414,12 +417,13 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             if (args.natGatewayEnabled && hasPublicSubnets) {
                 // Create one route table per AZ for NAT gateway routing
                 for (let azIndex = 0; azIndex < args.availabilityZoneCount; azIndex++) {
+                    const resourceName = this.getResourceName();
                     const privateRouteTable = new aws.ec2.RouteTable(
-                        `${this.urn}-rt-private-${azIndex}`,
+                        `${resourceName}-rt-private-${azIndex}`,
                         {
                             vpcId: this.vpc.id,
                             tags: this.mergeTags({
-                                Name: `${this.urn}-rt-private-${azIndex}`,
+                                Name: `${resourceName}-rt-private-${azIndex}`,
                                 Type: "private",
                                 AvailabilityZone: azIndex.toString()
                             })
@@ -434,12 +438,13 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 }
             } else {
                 // Create single private route table
+                const resourceName = this.getResourceName();
                 const privateRouteTable = new aws.ec2.RouteTable(
-                    `${this.urn}-rt-private`,
+                    `${resourceName}-rt-private`,
                     {
                         vpcId: this.vpc.id,
                         tags: this.mergeTags({
-                            Name: `${this.urn}-rt-private`,
+                            Name: `${resourceName}-rt-private`,
                             Type: "private"
                         })
                     },
@@ -473,12 +478,13 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             const azIndex = parseInt(subnetKey.split('-')[1], 10);
 
             // Create Elastic IP for NAT Gateway
+            const resourceName = this.getResourceName();
             const eip = new aws.ec2.Eip(
-                `${this.urn}-eip-nat-${azIndex}`,
+                `${resourceName}-eip-nat-${azIndex}`,
                 {
                     domain: "vpc",
                     tags: this.mergeTags({
-                        Name: `${this.urn}-eip-nat-${azIndex}`,
+                        Name: `${resourceName}-eip-nat-${azIndex}`,
                         Purpose: "NATGateway"
                     })
                 },
@@ -490,12 +496,12 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
 
             // Create NAT Gateway
             const natGateway = new aws.ec2.NatGateway(
-                `${this.urn}-nat-${azIndex}`,
+                `${resourceName}-nat-${azIndex}`,
                 {
                     allocationId: eip.id,
                     subnetId: subnet.id,
                     tags: this.mergeTags({
-                        Name: `${this.urn}-nat-${azIndex}`,
+                        Name: `${resourceName}-nat-${azIndex}`,
                         AvailabilityZone: azIndex.toString()
                     })
                 },
@@ -512,7 +518,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             const privateRouteTable = this.routeTables[`private-${azIndex}`] || this.routeTables['private'];
             if (privateRouteTable) {
                 new aws.ec2.Route(
-                    `${this.urn}-route-private-nat-${azIndex}`,
+                    `${resourceName}-route-private-nat-${azIndex}`,
                     {
                         routeTableId: privateRouteTable.id,
                         destinationCidrBlock: "0.0.0.0/0",
@@ -536,8 +542,9 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 const routeTable = this.routeTables[`private-${azIndex}`] || this.routeTables['private'];
 
                 if (routeTable) {
+                    const resourceName = this.getResourceName();
                     new aws.ec2.RouteTableAssociation(
-                        `${this.urn}-rta-${subnetKey}`,
+                        `${resourceName}-rta-${subnetKey}`,
                         {
                             subnetId: subnet.id,
                             routeTableId: routeTable.id
@@ -581,14 +588,15 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
 
         const subnetIds = attachmentSubnets.map(([_, subnet]) => subnet.id);
 
+        const resourceName = this.getResourceName();
         return new aws.ec2transitgateway.VpcAttachment(
-            `${this.urn}-tgw-attachment`,
+            `${resourceName}-tgw-attachment`,
             {
                 transitGatewayId: args.transitGatewayArn!,
                 vpcId: this.vpc.id,
                 subnetIds: subnetIds,
                 tags: this.mergeTags({
-                    Name: `${this.urn}-tgw-attachment`,
+                    Name: `${resourceName}-tgw-attachment`,
                     Purpose: "TransitGatewayConnectivity"
                 })
             },

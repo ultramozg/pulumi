@@ -1,0 +1,20 @@
+config:
+  aws:region: us-east-1
+  tags:AccountType: workloads
+  tags:Environment: production
+  tags:IsPrimary: "true"
+  tags:ManagedBy: pulumi
+  tags:Project: resilient-observability
+  tags:Region: us-east-1
+  workloads:accounttype: workloads
+  workloads:cidrBlock: 10.1.0.0/16
+  workloads:clusterName: workload-cluster
+  workloads:defaultRegion: us-east-1
+  workloads:environment: production
+  workloads:globalClusterIdentifier: workload-global-db
+  workloads:hostedZone: workloads.example.com
+  workloads:isPrimary: "true"
+  workloads:isprimary: "true"
+  workloads:managedby: pulumi
+  workloads:project: resilient-observability
+  workloads:region: us-east-1

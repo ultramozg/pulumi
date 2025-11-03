@@ -164,7 +164,7 @@ export class ECRComponent extends BaseAWSComponent implements ECRComponentOutput
         }];
 
         new aws.ecr.ReplicationConfiguration(
-            `${this.urn}-replication`,
+            `${this.getResourceName()}-replication`,
             {
                 replicationConfiguration: {
                     rules: replicationRules
