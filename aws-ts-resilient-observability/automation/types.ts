@@ -39,6 +39,7 @@ export interface DeploymentResult {
     stackName: string;
     success: boolean;
     outputs?: Record<string, any>;
+    previewSummary?: any;
     error?: string;
     duration?: number;
     retryCount?: number;

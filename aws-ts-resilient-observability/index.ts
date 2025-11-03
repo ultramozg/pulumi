@@ -69,6 +69,7 @@ export class InfrastructureAutomation {
     async previewAll(config: DeploymentConfig, options?: {
         parallel?: boolean;
         refresh?: boolean;
+        verbose?: boolean;
     }): Promise<DeploymentSummary> {
         return this.orchestrator.deployAll(config, {
             ...options,

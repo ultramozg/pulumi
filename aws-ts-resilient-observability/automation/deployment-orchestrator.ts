@@ -333,10 +333,16 @@ export class DeploymentOrchestrator {
             }
             
             let outputs: Record<string, any> | undefined;
+            let previewSummary: any = undefined;
             
             if (options?.dryRun) {
-                await stack.preview();
-                console.log(`   ✅ Preview completed for: ${stackConfig.name}`);
+                const previewResult = await stack.preview();
+                previewSummary = previewResult.changeSummary;
+                
+                // Skip detailed logging during tests to avoid async logging issues
+                if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                    this.printPreviewDetails(stackConfig.name, previewResult);
+                }
             } else {
                 if (options?.refresh) {
                     await stack.refresh();
@@ -354,6 +360,7 @@ export class DeploymentOrchestrator {
                 stackName: stackConfig.name,
                 success: true,
                 outputs,
+                previewSummary,
                 duration: endTime - startTime
             };
             
@@ -725,6 +732,42 @@ export class DeploymentOrchestrator {
         }
     }
 
+    /**
+     * Print detailed preview information for a stack
+     */
+    private printPreviewDetails(stackName: string, previewResult: any): void {
+        console.log(`\n🔍 Preview for: ${stackName}`);
+        console.log(`${'='.repeat(60)}`);
+        
+        // Show the raw Pulumi preview output - it's already well formatted
+        if (previewResult.stdout) {
+            console.log(previewResult.stdout);
+        }
+        
+        // Show any errors if present
+        if (previewResult.stderr && previewResult.stderr.trim()) {
+            console.log(`\n⚠️  Warnings/Errors:`);
+            console.log(previewResult.stderr);
+        }
+        
+        console.log(`${'='.repeat(60)}\n`);
+    }
+    
+    /**
+     * Get operation symbol for display
+     */
+    private getOperationSymbol(operation: string): string {
+        switch (operation) {
+            case 'create': return '+';
+            case 'update': return '~';
+            case 'delete': return '-';
+            case 'replace': return '±';
+            case 'create-replacement': return '++';
+            case 'delete-replaced': return '--';
+            default: return '?';
+        }
+    }
+
     private printSummary(summary: DeploymentSummary): void {
         // Skip logging during tests to avoid async logging issues
         if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
@@ -752,6 +795,22 @@ export class DeploymentOrchestrator {
             .forEach(result => {
                 const duration = result.duration ? `(${(result.duration / 1000).toFixed(2)}s)` : '';
                 console.log(`   ${result.stackName} ${duration}`);
+                
+                // Show preview summary if available
+                if (result.previewSummary) {
+                    const summary = result.previewSummary;
+                    const changes = [];
+                    if (summary.create > 0) changes.push(`+${summary.create}`);
+                    if (summary.update > 0) changes.push(`~${summary.update}`);
+                    if (summary.delete > 0) changes.push(`-${summary.delete}`);
+                    if (summary.replace > 0) changes.push(`±${summary.replace}`);
+                    
+                    if (changes.length > 0) {
+                        console.log(`     Changes: ${changes.join(', ')}`);
+                    } else {
+                        console.log(`     No changes required`);
+                    }
+                }
             });
     }
 }

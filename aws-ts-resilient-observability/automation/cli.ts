@@ -167,7 +167,8 @@ class AutomationCLI {
         
         const summary = await this.automation.previewAll(config, {
             parallel: options.parallel !== false,
-            refresh: options.refresh === true
+            refresh: options.refresh === true,
+            verbose: options.verbose === true
         });
         
         this.printDeploymentSummary(summary);
@@ -377,7 +378,7 @@ class AutomationCLI {
                     i++; // Skip next argument
                 } else if (key === 'no-parallel') {
                     options.parallel = false;
-                } else if (['refresh', 'force', 'continue-on-failure', 'rollback-on-failure'].includes(key)) {
+                } else if (['refresh', 'force', 'continue-on-failure', 'rollback-on-failure', 'verbose'].includes(key)) {
                     options[key.replace('-', '')] = true;
                 } else {
                     options[key] = true;
@@ -435,6 +436,7 @@ Options:
   --refresh                 Refresh stack state before deployment
   --continue-on-failure     Continue deployment even if some stacks fail
   --rollback-on-failure     Automatically rollback on deployment failure
+  --verbose                 Show detailed preview information
   --force                   Skip confirmation prompts
 
 Examples:
