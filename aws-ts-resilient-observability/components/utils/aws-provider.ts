@@ -99,15 +99,35 @@ export async function getCurrentAccountId(): Promise<string> {
 export async function validateRoleAssumption(roleArn: string): Promise<void> {
     try {
         const expectedAccountId = extractAccountIdFromArn(roleArn);
-        const provider = createCrossAccountProvider(roleArn, "us-east-1", "validation");
         
-        // Try to get caller identity using the assumed role
-        const identity = await aws.getCallerIdentity({}, { provider });
+        // Use AWS SDK directly for validation (not Pulumi functions)
+        const AWS = require('aws-sdk');
+        const sts = new AWS.STS();
         
-        if (identity.accountId !== expectedAccountId) {
+        // Try to assume the role
+        const assumeRoleParams = {
+            RoleArn: roleArn,
+            RoleSessionName: `pulumi-validation-${Date.now()}`,
+            DurationSeconds: 900 // 15 minutes minimum
+        };
+        
+        const assumeRoleResult = await sts.assumeRole(assumeRoleParams).promise();
+        
+        // Create temporary credentials and test them
+        const tempCredentials = new AWS.Config({
+            accessKeyId: assumeRoleResult.Credentials.AccessKeyId,
+            secretAccessKey: assumeRoleResult.Credentials.SecretAccessKey,
+            sessionToken: assumeRoleResult.Credentials.SessionToken,
+            region: 'us-east-1'
+        });
+        
+        const tempSts = new AWS.STS(tempCredentials);
+        const identity = await tempSts.getCallerIdentity().promise();
+        
+        if (identity.Account !== expectedAccountId) {
             throw new Error(
                 `Role assumption succeeded but landed in wrong account. ` +
-                `Expected: ${expectedAccountId}, Got: ${identity.accountId}`
+                `Expected: ${expectedAccountId}, Got: ${identity.Account}`
             );
         }
         

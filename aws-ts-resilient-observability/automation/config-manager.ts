@@ -14,7 +14,11 @@ export class ConfigManager {
      */
     public static loadConfig(configPath: string): DeploymentConfig {
         try {
-            const configContent = fs.readFileSync(configPath, 'utf8');
+            let configContent = fs.readFileSync(configPath, 'utf8');
+            
+            // Substitute environment variables
+            configContent = this.substituteEnvironmentVariables(configContent);
+            
             const config = yaml.load(configContent) as DeploymentConfig;
             
             this.validateConfig(config);
@@ -146,5 +150,33 @@ export class ConfigManager {
                 stack.workDir = path.resolve(stack.workDir);
             }
         });
+    }
+    
+    /**
+     * Substitute environment variables in configuration content
+     * Supports ${VAR_NAME} and $VAR_NAME syntax
+     * @param content Configuration file content
+     * @returns Content with environment variables substituted
+     */
+    private static substituteEnvironmentVariables(content: string): string {
+        // Replace ${VAR_NAME} syntax
+        content = content.replace(/\$\{([A-Z_][A-Z0-9_]*)\}/g, (match, varName) => {
+            const value = process.env[varName];
+            if (value === undefined) {
+                throw new Error(`Environment variable ${varName} is not defined`);
+            }
+            return value;
+        });
+        
+        // Replace $VAR_NAME syntax (word boundary to avoid partial matches)
+        content = content.replace(/\$([A-Z_][A-Z0-9_]*)\b/g, (match, varName) => {
+            const value = process.env[varName];
+            if (value === undefined) {
+                throw new Error(`Environment variable ${varName} is not defined`);
+            }
+            return value;
+        });
+        
+        return content;
     }
 }
