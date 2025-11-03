@@ -2,9 +2,16 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
 import { DeploymentOrchestrator } from './deployment-orchestrator';
 import { InfrastructureAutomation } from '../index';
 import { ConfigManager } from './config-manager';
+
+// Load environment variables from .env file if it exists
+if (fs.existsSync('.env')) {
+    dotenv.config();
+    console.log('🔧 Loaded environment variables from .env file');
+}
 
 /**
  * Enhanced CLI interface for the automation API with run-all capabilities
