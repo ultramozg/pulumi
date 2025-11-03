@@ -152,7 +152,19 @@ class AutomationCLI {
         
         console.log(`🔍 Previewing infrastructure from: ${configPath}`);
         
+        // Load config and filter stacks if specified
         const config = ConfigManager.loadConfig(configPath);
+        if (options.stacks) {
+            const stacksToDeploy = options.stacks.split(',').map((s: string) => s.trim());
+            config.stacks = config.stacks.filter(stack => stacksToDeploy.includes(stack.name));
+            
+            if (config.stacks.length === 0) {
+                throw new Error(`No matching stacks found. Available stacks: ${ConfigManager.loadConfig(configPath).stacks.map(s => s.name).join(', ')}`);
+            }
+            
+            console.log(`📦 Previewing only: ${config.stacks.map(s => s.name).join(', ')}`);
+        }
+        
         const summary = await this.automation.previewAll(config, {
             parallel: options.parallel !== false,
             refresh: options.refresh === true
