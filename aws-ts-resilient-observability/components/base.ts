@@ -207,9 +207,29 @@ export abstract class BaseAWSComponent extends pulumi.ComponentResource {
         
         // Use a static name instead of this.urn which is an Output
         const providerName = `${this.getResourceName()}-provider-${targetRegion}`;
-        const provider = new aws.Provider(providerName, {
+        
+        // Get AWS configuration from Pulumi config
+        const awsConfig = new pulumi.Config("aws");
+        const providerConfig: aws.ProviderArgs = {
             region: targetRegion
-        }, { parent: this });
+        };
+
+        // Check if assumeRoles is configured and add it to provider config
+        try {
+            const assumeRoles = awsConfig.getObject<aws.types.input.ProviderAssumeRole[]>("assumeRoles");
+            if (assumeRoles && assumeRoles.length > 0) {
+                providerConfig.assumeRoles = assumeRoles;
+                this.logger.debug("Provider configured with assumeRoles", { 
+                    region: targetRegion, 
+                    roleCount: assumeRoles.length 
+                });
+            }
+        } catch (error) {
+            // assumeRoles not configured, continue without it
+            this.logger.debug("No assumeRoles configuration found, using default credentials", { region: targetRegion });
+        }
+
+        const provider = new aws.Provider(providerName, providerConfig, { parent: this });
 
         this.logger.debug("AWS provider created successfully", { region: targetRegion });
         return provider;

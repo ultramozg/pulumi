@@ -1,9 +1,9 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { VPC } from "../components/vpc";
-import { EKS } from "../components/eks";
-import { RDS } from "../components/rds";
-import { Route53 } from "../components/route53";
+import { VPCComponent } from "../components/vpc";
+import { EKSComponent } from "../components/eks";
+import { RDSGlobalComponent } from "../components/rds";
+import { Route53Component } from "../components/route53";
 
 // Get configuration
 const config = new pulumi.Config("workloads");
@@ -24,7 +24,7 @@ const sharedServicesStackRef = new pulumi.StackReference(`shared-services-${curr
 const transitGatewayId = sharedServicesStackRef.getOutput("transitGatewayId");
 
 // Create Spoke VPC for workloads
-const spokeVpc = new VPC(`spoke-vpc-${currentRegion}`, {
+const spokeVpc = new VPCComponent(`spoke-vpc-${currentRegion}`, {
     region: currentRegion,
     cidrBlock: spokeVpcCidr,
     internetGatewayEnabled: true,
@@ -33,15 +33,18 @@ const spokeVpc = new VPC(`spoke-vpc-${currentRegion}`, {
     subnets: {
         public: {
             type: "public",
-            cidrPrefix: 24
+            subnetPrefix: 24,
+            availabilityZones: ["0", "1", "2"]
         },
         private: {
             type: "private",
-            cidrPrefix: 24
+            subnetPrefix: 24,
+            availabilityZones: ["0", "1", "2"]
         },
         database: {
             type: "private",
-            cidrPrefix: 26
+            subnetPrefix: 26,
+            availabilityZones: ["0", "1", "2"]
         }
     },
     tags: {
@@ -55,7 +58,7 @@ const spokeVpc = new VPC(`spoke-vpc-${currentRegion}`, {
 const spokeVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`spoke-vpc-attachment-${currentRegion}`, {
     transitGatewayId: transitGatewayId,
     vpcId: spokeVpc.vpcId,
-    subnetIds: spokeVpc.privateSubnetIds,
+    subnetIds: spokeVpc.getSubnetIdsByType("private"),
     tags: {
         Name: `spoke-vpc-attachment-${currentRegion}`,
         Region: currentRegion
@@ -63,11 +66,11 @@ const spokeVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`spoke-vpc-at
 });
 
 // Create EKS cluster for workloads
-const workloadEksCluster = new EKS(`workload-eks-${currentRegion}`, {
+const workloadEksCluster = new EKSComponent(`workload-eks-${currentRegion}`, {
     region: currentRegion,
     clusterName: eksClusterName,
     vpcId: spokeVpc.vpcId,
-    subnetIds: spokeVpc.privateSubnetIds,
+    subnetIds: spokeVpc.getSubnetIdsByType("private"),
     autoModeEnabled: false,
     addons: ["vpc-cni", "coredns", "kube-proxy", "aws-load-balancer-controller"],
     nodeGroups: [
@@ -79,7 +82,7 @@ const workloadEksCluster = new EKS(`workload-eks-${currentRegion}`, {
                 maxSize: 20,
                 desiredSize: 4
             },
-            labels: {
+            tags: {
                 "node-type": "workload"
             }
         }
@@ -93,22 +96,14 @@ const workloadEksCluster = new EKS(`workload-eks-${currentRegion}`, {
 });
 
 // Create RDS Aurora Global Database
-const rdsGlobalCluster = new RDS(`rds-global-${currentRegion}`, {
+const rdsGlobalCluster = new RDSGlobalComponent(`rds-global-${currentRegion}`, {
     globalClusterIdentifier: rdsGlobalClusterIdentifier,
     engine: "aurora-postgresql",
     regions: [
         {
             region: primaryRegion,
             isPrimary: true,
-            vpcId: spokeVpc.vpcId,
-            subnetIds: spokeVpc.databaseSubnetIds || spokeVpc.privateSubnetIds,
-            createSecurityGroup: true,
-            allowedCidrBlocks: [spokeVpcCidr]
-        },
-        {
-            region: secondaryRegion,
-            isPrimary: false,
-            // Note: This will reference the secondary region's VPC
+            subnetIds: ["subnet-placeholder1", "subnet-placeholder2"],
             createSecurityGroup: true
         }
     ],
@@ -122,80 +117,44 @@ const rdsGlobalCluster = new RDS(`rds-global-${currentRegion}`, {
 // Create Route 53 hosted zone and health checks (only in primary region)
 let route53Resources: any = {};
 if (isPrimary) {
-    const route53 = new Route53(`route53-${currentRegion}`, {
+    const route53Component = new Route53Component(`route53-${currentRegion}`, {
         hostedZones: [
             {
                 name: route53HostedZone,
                 private: false
             }
         ],
-        healthChecks: [
-            {
-                name: `workload-health-${primaryRegion}`,
-                fqdn: `${primaryRegion}.${route53HostedZone}`,
-                type: "HTTPS",
-                resourcePath: "/healthz",
-                port: 443
-            },
-            {
-                name: `workload-health-${secondaryRegion}`,
-                fqdn: `${secondaryRegion}.${route53HostedZone}`,
-                type: "HTTPS", 
-                resourcePath: "/healthz",
-                port: 443
-            }
-        ],
         records: [
             {
+                zoneName: route53HostedZone,
                 name: route53HostedZone,
                 type: "A",
-                setIdentifier: `primary-${primaryRegion}`,
-                failoverRoutingPolicy: {
-                    type: "PRIMARY"
-                },
-                healthCheckId: `workload-health-${primaryRegion}`,
-                alias: {
-                    // This would be populated with ALB DNS name
-                    name: "primary-alb.example.com",
-                    zoneId: "Z123456789"
-                }
-            },
-            {
-                name: route53HostedZone,
-                type: "A", 
-                setIdentifier: `secondary-${secondaryRegion}`,
-                failoverRoutingPolicy: {
-                    type: "SECONDARY"
-                },
-                healthCheckId: `workload-health-${secondaryRegion}`,
-                alias: {
-                    // This would be populated with ALB DNS name
-                    name: "secondary-alb.example.com",
-                    zoneId: "Z987654321"
-                }
+                values: ["1.2.3.4"], // Placeholder IP
+                ttl: 300
             }
         ]
     });
     
     route53Resources = {
-        hostedZoneId: route53.hostedZoneIds,
-        healthCheckIds: route53.healthCheckIds
+        hostedZoneIds: route53Component.hostedZoneIds,
+        nameServers: route53Component.nameServers,
+        recordFqdns: route53Component.recordFqdns
     };
 }
 
 // Export important values for cross-stack references
 export const spokeVpcId = spokeVpc.vpcId;
 export const spokeVpcCidrBlock = spokeVpc.cidrBlock;
-export const spokePrivateSubnetIds = spokeVpc.privateSubnetIds;
-export const spokePublicSubnetIds = spokeVpc.publicSubnetIds;
-export const spokeDatabaseSubnetIds = spokeVpc.databaseSubnetIds;
-export const eksClusterId = workloadEksCluster.clusterId;
-export const eksClusterEndpoint = workloadEksCluster.clusterEndpoint;
-export const eksClusterArn = workloadEksCluster.clusterArn;
-export const rdsClusterIdentifier = rdsGlobalCluster.clusterIdentifier;
-export const rdsClusterEndpoint = rdsGlobalCluster.clusterEndpoint;
+export const spokePrivateSubnetIds = spokeVpc.getSubnetIdsByType("private");
+export const spokePublicSubnetIds = spokeVpc.getSubnetIdsByType("public");
+export const spokeDatabaseSubnetIds = spokeVpc.getSubnetIdsByName("database");
+export const workloadEksClusterName = workloadEksCluster.clusterName;
+export const workloadEksClusterEndpoint = workloadEksCluster.clusterEndpoint;
+export const workloadEksClusterArn = workloadEksCluster.clusterArn;
+export const workloadRdsGlobalClusterIdentifier = rdsGlobalCluster.globalClusterIdentifier;
+export const workloadRdsClusterEndpoint = rdsGlobalCluster.primaryClusterEndpoint;
 export const transitGatewayAttachmentId = spokeVpcAttachment.id;
 export const region = currentRegion;
 export const isPrimaryRegion = isPrimary;
-export const route53Resources = route53Resources;
+export const workloadRoute53Resources = route53Resources;
 
