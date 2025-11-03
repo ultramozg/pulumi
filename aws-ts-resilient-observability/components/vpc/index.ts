@@ -98,7 +98,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
         const provider = this.createProvider(args.region);
 
         // Get availability zones for the region
-        const azs = this.getAvailabilityZones(args.region, args.availabilityZoneCount);
+        const azs = this.getAvailabilityZones(args.region, args.availabilityZoneCount, provider);
 
         // Create VPC with IPAM or manual CIDR
         this.vpc = this.createVPC(args, provider);
@@ -197,7 +197,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             enableDnsHostnames: true,
             enableDnsSupport: true,
             tags: this.mergeTags({
-                Name: `${this.urn}-vpc`,
+                Name: `${this.getResourceName()}-vpc`,
                 Purpose: "NetworkingFoundation"
             })
         };
@@ -215,7 +215,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
         }
 
         return new aws.ec2.Vpc(
-            `${this.urn}-vpc`,
+            `${this.getResourceName()}-vpc`,
             vpcArgs,
             {
                 parent: this,
@@ -227,8 +227,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
     /**
      * Get availability zones for the specified region
      */
-    private getAvailabilityZones(region: string, count: number): pulumi.Output<string[]> {
-        const provider = this.createProvider(region);
+    private getAvailabilityZones(region: string, count: number, provider: aws.Provider): pulumi.Output<string[]> {
         return pulumi.output(aws.getAvailabilityZones({
             state: "available"
         }, { provider })).apply(azs => {
@@ -242,11 +241,11 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
      */
     private createInternetGateway(provider: aws.Provider): aws.ec2.InternetGateway {
         const igw = new aws.ec2.InternetGateway(
-            `${this.urn}-igw`,
+            `${this.getResourceName()}-igw`,
             {
                 vpcId: this.vpc.id,
                 tags: this.mergeTags({
-                    Name: `${this.urn}-igw`,
+                    Name: `${this.getResourceName()}-igw`,
                     Purpose: "InternetAccess"
                 })
             },

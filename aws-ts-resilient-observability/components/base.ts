@@ -205,7 +205,9 @@ export abstract class BaseAWSComponent extends pulumi.ComponentResource {
         
         this.logger.debug("Creating AWS provider", { region: targetRegion });
         
-        const provider = new aws.Provider(`${this.urn}-provider-${targetRegion}`, {
+        // Use a static name instead of this.urn which is an Output
+        const providerName = `${this.getResourceName()}-provider-${targetRegion}`;
+        const provider = new aws.Provider(providerName, {
             region: targetRegion
         }, { parent: this });
 

@@ -1,21 +1,20 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { TransitGateway } from "../components/transitGateway";
-import { VPC } from "../components/vpc";
-import { EKS } from "../components/eks";
+import { VPCComponent } from "../components/vpc";
+import { EKSComponent } from "../components/eks";
 
-// Get configuration
+// Get configuration from deployment config (set by automation)
 const config = new pulumi.Config("shared-services");
 const awsConfig = new pulumi.Config("aws");
 
-const primaryRegion = config.require("primaryRegion");
-const secondaryRegion = config.require("secondaryRegion");
 const currentRegion = awsConfig.require("region");
-const isPrimary = config.getBoolean("isPrimary") ?? (currentRegion === primaryRegion);
+const isPrimary = config.get("isprimary") === "true";
 
-const transitGatewayAsn = config.getNumber("transitGatewayAsn") || 64512;
-const hubVpcCidr = config.require("hubVpcCidr");
-const eksClusterName = config.require("eksClusterName");
+// All configuration comes from deployment-config.json via automation
+const transitGatewayAsn = config.requireNumber("asn");
+const hubVpcCidr = config.require("cidrBlock");
+const eksClusterName = config.require("clusterName");
 
 // Create Transit Gateway for network connectivity
 const transitGateway = new TransitGateway(`transit-gateway-${currentRegion}`, {
@@ -29,7 +28,7 @@ const transitGateway = new TransitGateway(`transit-gateway-${currentRegion}`, {
 });
 
 // Create Hub VPC for shared services
-const hubVpc = new VPC(`hub-vpc-${currentRegion}`, {
+const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
     region: currentRegion,
     cidrBlock: hubVpcCidr,
     internetGatewayEnabled: true,
@@ -38,11 +37,13 @@ const hubVpc = new VPC(`hub-vpc-${currentRegion}`, {
     subnets: {
         public: {
             type: "public",
-            cidrPrefix: 24
+            subnetPrefix: 24,
+            availabilityZones: ["0", "1", "2"]
         },
         private: {
-            type: "private",
-            cidrPrefix: 24
+            type: "private", 
+            subnetPrefix: 24,
+            availabilityZones: ["0", "1", "2"]
         }
     },
     tags: {
@@ -54,9 +55,9 @@ const hubVpc = new VPC(`hub-vpc-${currentRegion}`, {
 
 // Attach Hub VPC to Transit Gateway
 const hubVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`hub-vpc-attachment-${currentRegion}`, {
-    transitGatewayId: transitGateway.id,
+    transitGatewayId: transitGateway.transitGateway.id,
     vpcId: hubVpc.vpcId,
-    subnetIds: hubVpc.privateSubnetIds,
+    subnetIds: hubVpc.getSubnetIdsByType('private'),
     tags: {
         Name: `hub-vpc-attachment-${currentRegion}`,
         Region: currentRegion
@@ -64,11 +65,11 @@ const hubVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`hub-vpc-attach
 });
 
 // Create EKS cluster for shared monitoring services
-const sharedEksCluster = new EKS(`shared-eks-${currentRegion}`, {
+const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
     region: currentRegion,
     clusterName: eksClusterName,
-    vpcId: hubVpc.vpcId,
-    subnetIds: hubVpc.privateSubnetIds,
+    // vpcId: hubVpc.vpcId,
+    // subnetIds: hubVpc.getSubnetIdsByType('private'),
     autoModeEnabled: false,
     addons: ["vpc-cni", "coredns", "kube-proxy", "aws-load-balancer-controller"],
     nodeGroups: [
@@ -80,7 +81,7 @@ const sharedEksCluster = new EKS(`shared-eks-${currentRegion}`, {
                 maxSize: 10,
                 desiredSize: 3
             },
-            labels: {
+            tags: {
                 "node-type": "monitoring"
             }
         }
@@ -106,7 +107,7 @@ if (isPrimary) {
     });
 
     new aws.ram.ResourceAssociation(`tgw-resource-association-${currentRegion}`, {
-        resourceArn: transitGateway.arn,
+        resourceArn: transitGateway.transitGateway.arn,
         resourceShareArn: ramShare.arn
     });
 
@@ -123,13 +124,13 @@ if (isPrimary) {
 }
 
 // Export important values for cross-stack references
-export const transitGatewayId = transitGateway.id;
-export const transitGatewayArn = transitGateway.arn;
+export const transitGatewayId = transitGateway.transitGateway.id;
+export const transitGatewayArn = transitGateway.transitGateway.arn;
 export const hubVpcId = hubVpc.vpcId;
 export const hubVpcCidrBlock = hubVpc.cidrBlock;
-export const hubPrivateSubnetIds = hubVpc.privateSubnetIds;
-export const hubPublicSubnetIds = hubVpc.publicSubnetIds;
-export const eksClusterId = sharedEksCluster.clusterId;
+export const hubPrivateSubnetIds = hubVpc.getSubnetIdsByType('private');
+export const hubPublicSubnetIds = hubVpc.getSubnetIdsByType('public');
+export const eksClusterId = sharedEksCluster.clusterName;
 export const eksClusterEndpoint = sharedEksCluster.clusterEndpoint;
 export const eksClusterArn = sharedEksCluster.clusterArn;
 export const ramShareArn = ramShare?.arn;

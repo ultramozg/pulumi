@@ -109,7 +109,7 @@ export class DeploymentOrchestrator {
                     group.map(s => s.name)
                 );
                 
-                const groupResults = await this.deployGroup(group, options);
+                const groupResults = await this.deployGroup(group, options, config);
                 results.push(...groupResults);
                 
                 // Analyze group results
@@ -231,20 +231,21 @@ export class DeploymentOrchestrator {
             dryRun?: boolean;
             refresh?: boolean;
             continueOnFailure?: boolean;
-        }
+        },
+        deploymentConfig?: DeploymentConfig
     ): Promise<DeploymentResult[]> {
         const parallel = options?.parallel !== false; // Default to parallel
         const continueOnFailure = options?.continueOnFailure !== false; // Default to true
         
         if (parallel && stacks.length > 1 && continueOnFailure) {
             // Deploy stacks in parallel only if we continue on failure
-            const promises = stacks.map(stack => this.deployStack(stack, options));
+            const promises = stacks.map(stack => this.deployStack(stack, options, deploymentConfig));
             return Promise.all(promises);
         } else {
             // Deploy stacks sequentially
             const results: DeploymentResult[] = [];
             for (const stack of stacks) {
-                const result = await this.deployStack(stack, options);
+                const result = await this.deployStack(stack, options, deploymentConfig);
                 results.push(result);
                 
                 // If continueOnFailure is false and this stack failed, stop here
@@ -284,7 +285,8 @@ export class DeploymentOrchestrator {
         options?: {
             dryRun?: boolean;
             refresh?: boolean;
-        }
+        },
+        deploymentConfig?: DeploymentConfig
     ): Promise<DeploymentResult> {
         const startTime = Date.now();
         
@@ -300,13 +302,34 @@ export class DeploymentOrchestrator {
             });
             
             // Set stack configuration if provided
-            if (stackConfig.tags) {
-                await stack.setAllConfig({
-                    ...Object.entries(stackConfig.tags).reduce((acc, [key, value]) => {
-                        acc[`aws:tags:${key}`] = { value };
-                        return acc;
-                    }, {} as Record<string, automation.ConfigValue>)
+            const configValues: Record<string, automation.ConfigValue> = {};
+            
+            // Add default tags from deployment config
+            if (deploymentConfig?.defaultTags) {
+                Object.entries(deploymentConfig.defaultTags).forEach(([key, value]) => {
+                    configValues[`tags:${key}`] = { value };
                 });
+            }
+            
+            // Add stack-specific tags (these override default tags)
+            if (stackConfig.tags) {
+                Object.entries(stackConfig.tags).forEach(([key, value]) => {
+                    configValues[`tags:${key}`] = { value };
+                });
+            }
+            
+            // Add stack-specific configuration based on stack name and deployment config
+            if (deploymentConfig) {
+                this.setStackSpecificConfig(stackConfig, deploymentConfig, configValues);
+            }
+            
+            // Set all config values at once
+            if (Object.keys(configValues).length > 0) {
+                // Skip logging during tests to avoid async logging issues
+                if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                    console.log(`Setting config for ${stackConfig.name}:`, Object.keys(configValues));
+                }
+                await stack.setAllConfig(configValues);
             }
             
             let outputs: Record<string, any> | undefined;
@@ -424,6 +447,46 @@ export class DeploymentOrchestrator {
     }
 
     /**
+     * Set stack-specific configuration values from deployment config
+     */
+    private setStackSpecificConfig(
+        stackConfig: StackConfig,
+        deploymentConfig: DeploymentConfig,
+        configValues: Record<string, automation.ConfigValue>
+    ): void {
+        // Set common configuration
+        configValues['aws:region'] = { value: stackConfig.tags?.Region || deploymentConfig.defaultRegion || 'us-east-1' };
+        
+        // Extract configuration from the stack's components in deployment config
+        if (stackConfig.components) {
+            // Extract just the directory name from workDir (e.g., "./shared-services" -> "shared-services")
+            const namespace = stackConfig.workDir.replace(/^\.\//, '');
+            
+            stackConfig.components.forEach(component => {
+                if (component.config) {
+                    // Convert component config to Pulumi config format
+                    Object.entries(component.config).forEach(([key, value]) => {
+                        configValues[`${namespace}:${key}`] = { value: String(value) };
+                    });
+                }
+            });
+        }
+        
+        // Set additional stack-level configuration
+        const namespace = stackConfig.workDir.replace(/^\.\//, '');
+        configValues[`${namespace}:defaultRegion`] = { 
+            value: deploymentConfig.defaultRegion || 'us-east-1' 
+        };
+        
+        // Add stack tags as configuration
+        if (stackConfig.tags) {
+            Object.entries(stackConfig.tags).forEach(([key, value]) => {
+                configValues[`${namespace}:${key.toLowerCase()}`] = { value };
+            });
+        }
+    }
+
+    /**
      * Validate deployment configuration
      */
     private validateDeploymentConfig(config: DeploymentConfig): void {
@@ -496,21 +559,22 @@ export class DeploymentOrchestrator {
             refresh?: boolean;
         },
         groupIndex?: number,
-        totalGroups?: number
+        totalGroups?: number,
+        deploymentConfig?: DeploymentConfig
     ): Promise<DeploymentResult[]> {
         const parallel = options?.parallel !== false; // Default to parallel
         
         if (parallel && stacks.length > 1) {
             // Deploy stacks in parallel with individual error handling
             const promises = stacks.map(stack => 
-                this.deployStackWithErrorHandling(stack, options, groupIndex, totalGroups)
+                this.deployStackWithErrorHandling(stack, options, groupIndex, totalGroups, deploymentConfig)
             );
             return Promise.all(promises);
         } else {
             // Deploy stacks sequentially
             const results: DeploymentResult[] = [];
             for (const stack of stacks) {
-                const result = await this.deployStackWithErrorHandling(stack, options, groupIndex, totalGroups);
+                const result = await this.deployStackWithErrorHandling(stack, options, groupIndex, totalGroups, deploymentConfig);
                 results.push(result);
                 
                 // For sequential deployment, stop on first failure unless continueOnFailure is set
@@ -533,7 +597,8 @@ export class DeploymentOrchestrator {
             refresh?: boolean;
         },
         groupIndex?: number,
-        totalGroups?: number
+        totalGroups?: number,
+        deploymentConfig?: DeploymentConfig
     ): Promise<DeploymentResult> {
         if (this.metricsCollector) {
             this.metricsCollector.startStack(stackConfig.name);
@@ -543,7 +608,7 @@ export class DeploymentOrchestrator {
         
         return ErrorHandler.executeWithRecovery(
             async () => {
-                return this.deployStack(stackConfig, options);
+                return this.deployStack(stackConfig, options, deploymentConfig);
             },
             `deploy-stack-${stackConfig.name}`,
             'DeploymentOrchestrator',
