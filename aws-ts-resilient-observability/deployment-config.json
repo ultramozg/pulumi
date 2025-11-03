@@ -14,7 +14,7 @@
       "stackName": "shared-services",
       "configFile": "Pulumi.shared-services.yaml",
       "description": "Shared services in primary region (us-east-1)",
-      "roleArn": "arn:aws:iam::SHARED-SERVICES-ACCOUNT-ID:role/PulumiExecutionRole",
+      "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
       "components": [
         {
           "type": "transit-gateway",
@@ -54,7 +54,7 @@
       "configFile": "Pulumi.shared-services-secondary.yaml",
       "description": "Shared services in secondary region (us-west-2)",
       "dependencies": ["shared-services-primary"],
-      "roleArn": "arn:aws:iam::SHARED-SERVICES-ACCOUNT-ID:role/PulumiExecutionRole",
+      "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
       "components": [
         {
           "type": "transit-gateway",
@@ -94,7 +94,7 @@
       "configFile": "Pulumi.workload.yaml",
       "description": "Workloads in primary region (us-east-1)",
       "dependencies": ["shared-services-primary"],
-      "roleArn": "arn:aws:iam::WORKLOADS-ACCOUNT-ID:role/PulumiExecutionRole",
+      "roleArn": "${WORKLOADS_ROLE_ARN}",
       "components": [
         {
           "type": "spoke-vpc",
@@ -142,7 +142,7 @@
       "configFile": "Pulumi.workload-secondary.yaml",
       "description": "Workloads in secondary region (us-west-2)",
       "dependencies": ["shared-services-secondary", "workloads-primary"],
-      "roleArn": "arn:aws:iam::WORKLOADS-ACCOUNT-ID:role/PulumiExecutionRole",
+      "roleArn": "${WORKLOADS_ROLE_ARN}",
       "components": [
         {
           "type": "spoke-vpc",
