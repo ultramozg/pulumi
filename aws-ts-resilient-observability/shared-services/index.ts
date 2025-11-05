@@ -62,6 +62,13 @@ const hubVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`hub-vpc-attach
         Name: `hub-vpc-attachment-${currentRegion}`,
         Region: currentRegion
     }
+}, {
+    // Ensure proper deletion order
+    deleteBeforeReplace: true,
+    customTimeouts: {
+        create: "10m",
+        delete: "10m"
+    }
 });
 
 // Create EKS cluster for shared monitoring services
