@@ -94,9 +94,41 @@ const hubVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`hub-vpc-attach
 //     }
 // });
 
-// Share Transit Gateway with workloads account via RAM (only in primary region)
+// Share Transit Gateway with workloads account via RAM (only for cross-account scenarios)
 let ramShare: aws.ram.ResourceShare | undefined;
-if (isPrimary) {
+let tgwResourceAssociation: aws.ram.ResourceAssociation | undefined;
+
+// Check if cross-account sharing is needed
+const workloadsRoleArn = process.env.WORKLOADS_ROLE_ARN;
+const sharedServicesRoleArn = process.env.SHARED_SERVICES_ROLE_ARN;
+
+let workloadsAccountId: string | undefined;
+let sharedServicesAccountId: string | undefined;
+
+if (workloadsRoleArn) {
+    const arnParts = workloadsRoleArn.split(':');
+    if (arnParts.length >= 5) {
+        workloadsAccountId = arnParts[4];
+    }
+}
+
+if (sharedServicesRoleArn) {
+    const arnParts = sharedServicesRoleArn.split(':');
+    if (arnParts.length >= 5) {
+        sharedServicesAccountId = arnParts[4];
+    }
+}
+
+// Only create RAM resources if we have different accounts and we're in primary region
+const isCrossAccount = workloadsAccountId && sharedServicesAccountId && workloadsAccountId !== sharedServicesAccountId;
+
+// For now, disable RAM sharing to avoid deletion issues
+// TODO: Re-enable once RAM resources are properly cleaned up
+const enableRamSharing = config.getBoolean("enableRamSharing") ?? false;
+
+if (isPrimary && isCrossAccount && enableRamSharing) {
+    console.log(`Cross-account deployment detected: Shared Services (${sharedServicesAccountId}) -> Workloads (${workloadsAccountId})`);
+    
     ramShare = new aws.ram.ResourceShare(`tgw-share-${currentRegion}`, {
         name: `transit-gateway-share-${currentRegion}`,
         allowExternalPrincipals: true,
@@ -106,29 +138,37 @@ if (isPrimary) {
         }
     });
 
-    const tgwResourceAssociation = new aws.ram.ResourceAssociation(`tgw-resource-association-${currentRegion}`, {
+    tgwResourceAssociation = new aws.ram.ResourceAssociation(`tgw-resource-association-${currentRegion}`, {
         resourceArn: transitGateway.transitGateway.arn,
         resourceShareArn: ramShare.arn
     }, {
-        // Add explicit dependency and deletion protection
         dependsOn: [ramShare],
         deleteBeforeReplace: true,
-        // Custom timeouts for deletion
         customTimeouts: {
             delete: "10m"
         }
     });
 
-    // Associate with workloads account for cross-account resource sharing
-    const workloadsAccountId = process.env.WORKLOADS_ACCOUNT_ID;
-    if (workloadsAccountId) {
-        new aws.ram.PrincipalAssociation(`tgw-principal-association-${currentRegion}`, {
-            principal: workloadsAccountId,
-            resourceShareArn: ramShare.arn
-        });
-    } else {
-        console.warn("WORKLOADS_ACCOUNT_ID not set - RAM principal association skipped");
-    }
+    // Associate with workloads account
+    new aws.ram.PrincipalAssociation(`tgw-principal-association-${currentRegion}`, {
+        principal: workloadsAccountId!,
+        resourceShareArn: ramShare.arn
+    }, {
+        dependsOn: [ramShare, tgwResourceAssociation],
+        deleteBeforeReplace: true,
+        customTimeouts: {
+            create: "10m",
+            delete: "15m"
+        }
+    });
+} else if (isPrimary && isCrossAccount) {
+    console.log(`Cross-account deployment detected but RAM sharing disabled. Set enableRamSharing=true to enable.`);
+    console.log(`Shared Services (${sharedServicesAccountId}) -> Workloads (${workloadsAccountId})`);
+    console.log(`Transit Gateway ID will be shared via stack outputs: ${transitGateway.transitGateway.id}`);
+} else if (isPrimary) {
+    console.log("Single-account deployment detected - Transit Gateway will be shared directly without RAM");
+} else {
+    console.log("Secondary region - no RAM sharing needed");
 }
 
 // Export important values for cross-stack references
@@ -142,5 +182,6 @@ export const hubPublicSubnetIds = hubVpc.getSubnetIdsByType('public');
 // export const eksClusterEndpoint = sharedEksCluster.clusterEndpoint;
 // export const eksClusterArn = sharedEksCluster.clusterArn;
 export const ramShareArn = ramShare?.arn;
+export const isCrossAccountDeployment = isCrossAccount;
 export const region = currentRegion;
 export const isPrimaryRegion = isPrimary;
