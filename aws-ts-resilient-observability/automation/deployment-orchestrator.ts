@@ -103,6 +103,11 @@ export class DeploymentOrchestrator {
                 const group = deploymentGroups[i];
                 const groupIndex = i + 1;
                 
+                // Compact group header
+                if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                    console.log(`\n🔄 Group ${groupIndex}/${deploymentGroups.length} (${group.length} stacks)`);
+                }
+                
                 this.logger.groupDeploymentStart(
                     groupIndex, 
                     deploymentGroups.length, 
@@ -291,9 +296,10 @@ export class DeploymentOrchestrator {
         const startTime = Date.now();
         
         try {
-            // Skip logging during tests to avoid async logging issues
+            // Show stack header
             if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
-                console.log(`   📦 Deploying stack: ${stackConfig.name}`);
+                console.log(`\n📦 Deploying: ${stackConfig.name}`);
+                console.log(`${'─'.repeat(60)}`);
             }
             
             const stack = await automation.LocalWorkspace.createOrSelectStack({
@@ -328,12 +334,8 @@ export class DeploymentOrchestrator {
                 this.setStackSpecificConfig(stackConfig, deploymentConfig, configValues);
             }
             
-            // Set all config values at once
+            // Set all config values at once (no verbose logging)
             if (Object.keys(configValues).length > 0) {
-                // Skip logging during tests to avoid async logging issues
-                if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
-                    console.log(`Setting config for ${stackConfig.name}:`, Object.keys(configValues));
-                }
                 await stack.setAllConfig(configValues);
             }
             
@@ -341,22 +343,69 @@ export class DeploymentOrchestrator {
             let previewSummary: any = undefined;
             
             if (options?.dryRun) {
-                const previewResult = await stack.preview();
+                // Show preview with cleaner formatting
+                let lastPreviewOutput = '';
+                const previewResult = await stack.preview({
+                    onOutput: (out) => {
+                        if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                            // Filter out progress updates, empty lines, and repetitive output
+                            const cleanOutput = out.trim();
+                            if (cleanOutput && 
+                                cleanOutput !== lastPreviewOutput &&
+                                !cleanOutput.includes('Previewing') && 
+                                !cleanOutput.includes('@ Previewing') &&
+                                !cleanOutput.match(/^[\s\n]*$/) &&
+                                !cleanOutput.match(/^\s*\.\.\.\s*$/) &&
+                                !cleanOutput.match(/^\s*\+\s*$/) &&
+                                cleanOutput.length > 3 &&
+                                !cleanOutput.match(/^[\s\+\-\~]*$/)) {
+                                console.log(cleanOutput);
+                                lastPreviewOutput = cleanOutput;
+                            }
+                        }
+                    }
+                });
                 previewSummary = previewResult.changeSummary;
                 
-                // Skip detailed logging during tests to avoid async logging issues
+                // Show preview completion
                 if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
-                    this.printPreviewDetails(stackConfig.name, previewResult);
+                    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                    console.log(`${'─'.repeat(60)}`);
+                    console.log(`🔍 Preview completed: ${stackConfig.name} (${duration}s)`);
                 }
             } else {
                 if (options?.refresh) {
                     await stack.refresh();
                 }
-                const result = await stack.up();
+                // Show Pulumi output with cleaner formatting
+                let lastOutput = '';
+                const result = await stack.up({
+                    onOutput: (out) => {
+                        if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                            // Filter out progress updates, empty lines, and repetitive output
+                            const cleanOutput = out.trim();
+                            if (cleanOutput && 
+                                cleanOutput !== lastOutput &&
+                                !cleanOutput.includes('Updating') && 
+                                !cleanOutput.includes('@ Updating') &&
+                                !cleanOutput.match(/^[\s\n]*$/) &&
+                                !cleanOutput.match(/^\s*\.\.\.\s*$/) &&
+                                !cleanOutput.match(/^\s*\+\s*$/) &&
+                                cleanOutput.length > 3 &&
+                                !cleanOutput.match(/^[\s\+\-\~]*$/)) {
+                                console.log(cleanOutput);
+                                lastOutput = cleanOutput;
+                            }
+                        }
+                    }
+                });
                 outputs = result.outputs;
-                // Skip logging during tests to avoid async logging issues
+                
+                // Show completion status
                 if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
-                    console.log(`   ✅ Deployed: ${stackConfig.name}`);
+                    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                    console.log(`${'─'.repeat(60)}`);
+                    console.log(`✅ Completed: ${stackConfig.name} (${duration}s)`);
                 }
             }
             
@@ -371,9 +420,12 @@ export class DeploymentOrchestrator {
             
         } catch (error) {
             const endTime = Date.now();
-            // Skip logging during tests to avoid async logging issues
+            // Show error with context
             if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
-                console.log(`   ❌ Failed to deploy: ${stackConfig.name} - ${error}`);
+                const duration = ((endTime - startTime) / 1000).toFixed(1);
+                console.log(`${'─'.repeat(60)}`);
+                console.log(`❌ Failed: ${stackConfig.name} (${duration}s)`);
+                console.log(`Error: ${error instanceof Error ? error.message : String(error)}`);
             }
             
             return {
@@ -389,15 +441,39 @@ export class DeploymentOrchestrator {
         const startTime = Date.now();
         
         try {
-            console.log(`   🗑️  Destroying stack: ${stackConfig.name}`);
+            // Show destruction header
+            console.log(`\n🗑️  Destroying: ${stackConfig.name}`);
+            console.log(`${'─'.repeat(60)}`);
             
             const stack = await automation.LocalWorkspace.createOrSelectStack({
                 stackName: stackConfig.name,
                 workDir: stackConfig.workDir
             });
             
-            await stack.destroy();
-            console.log(`   ✅ Destroyed: ${stackConfig.name}`);
+            // Show destruction output
+            let lastDestroyOutput = '';
+            await stack.destroy({
+                onOutput: (out) => {
+                    // Filter out progress updates, empty lines, and repetitive output
+                    const cleanOutput = out.trim();
+                    if (cleanOutput && 
+                        cleanOutput !== lastDestroyOutput &&
+                        !cleanOutput.includes('Destroying') && 
+                        !cleanOutput.includes('@ Destroying') &&
+                        !cleanOutput.match(/^[\s\n]*$/) &&
+                        !cleanOutput.match(/^\s*\.\.\.\s*$/) &&
+                        !cleanOutput.match(/^\s*\-\s*$/) &&
+                        cleanOutput.length > 3 &&
+                        !cleanOutput.match(/^[\s\+\-\~]*$/)) {
+                        console.log(cleanOutput);
+                        lastDestroyOutput = cleanOutput;
+                    }
+                }
+            });
+            
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`${'─'.repeat(60)}`);
+            console.log(`✅ Destroyed: ${stackConfig.name} (${duration}s)`);
             
             const endTime = Date.now();
             return {
@@ -408,7 +484,10 @@ export class DeploymentOrchestrator {
             
         } catch (error) {
             const endTime = Date.now();
-            console.log(`   ❌ Failed to destroy: ${stackConfig.name} - ${error}`);
+            const duration = ((endTime - startTime) / 1000).toFixed(1);
+            console.log(`${'─'.repeat(60)}`);
+            console.log(`❌ Failed to destroy: ${stackConfig.name} (${duration}s)`);
+            console.log(`Error: ${error instanceof Error ? error.message : String(error)}`);
             
             return {
                 stackName: stackConfig.name,
@@ -812,43 +891,31 @@ export class DeploymentOrchestrator {
             return;
         }
         
-        console.log(`\n📊 Deployment Summary: ${summary.deploymentName}`);
-        console.log(`   Total stacks: ${summary.totalStacks}`);
-        console.log(`   Successful: ${summary.successfulStacks}`);
-        console.log(`   Failed: ${summary.failedStacks}`);
-        console.log(`   Duration: ${(summary.totalDuration / 1000).toFixed(2)}s`);
+        const duration = (summary.totalDuration / 1000).toFixed(1);
+        const successRate = ((summary.successfulStacks / summary.totalStacks) * 100).toFixed(0);
+        
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`📊 ${summary.deploymentName} | ${summary.successfulStacks}/${summary.totalStacks} (${successRate}%) | ${duration}s`);
         
         if (summary.failedStacks > 0) {
-            console.log(`\n❌ Failed stacks:`);
+            console.log(`\n❌ Failed (${summary.failedStacks}):`);
             summary.results
                 .filter(r => !r.success)
                 .forEach(result => {
-                    console.log(`   ${result.stackName}: ${result.error}`);
+                    const errorMsg = result.error?.split('\n')[0] || 'Unknown error';
+                    console.log(`   ${result.stackName.padEnd(30)} ${errorMsg.substring(0, 40)}`);
                 });
         }
         
-        console.log(`\n✅ Successful stacks:`);
-        summary.results
-            .filter(r => r.success)
-            .forEach(result => {
-                const duration = result.duration ? `(${(result.duration / 1000).toFixed(2)}s)` : '';
-                console.log(`   ${result.stackName} ${duration}`);
-                
-                // Show preview summary if available
-                if (result.previewSummary) {
-                    const summary = result.previewSummary;
-                    const changes = [];
-                    if (summary.create > 0) changes.push(`+${summary.create}`);
-                    if (summary.update > 0) changes.push(`~${summary.update}`);
-                    if (summary.delete > 0) changes.push(`-${summary.delete}`);
-                    if (summary.replace > 0) changes.push(`±${summary.replace}`);
-                    
-                    if (changes.length > 0) {
-                        console.log(`     Changes: ${changes.join(', ')}`);
-                    } else {
-                        console.log(`     No changes required`);
-                    }
-                }
-            });
+        if (summary.successfulStacks > 0) {
+            console.log(`\n✅ Successful (${summary.successfulStacks}):`);
+            summary.results
+                .filter(r => r.success)
+                .forEach(result => {
+                    const duration = result.duration ? `${(result.duration / 1000).toFixed(1)}s` : '';
+                    console.log(`   ${result.stackName.padEnd(30)} ${duration.padStart(6)}`);
+                });
+        }
+        console.log(`${'='.repeat(60)}`);
     }
 }
