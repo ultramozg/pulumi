@@ -22,7 +22,7 @@ export class TransitGateway extends pulumi.ComponentResource {
             dnsSupport: "enable",
             vpnEcmpSupport: "enable",
             tags: args.tags || { Name: name },
-        }, { parent: this });
+        }, { parent: this, provider: opts?.provider });
 
         this.registerOutputs({
             transitGateway: this.transitGateway,

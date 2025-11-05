@@ -94,8 +94,8 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
         // Validate subnet specifications
         this.validateSubnetSpecs(args.subnets, args.availabilityZoneCount);
 
-        // Create regional provider
-        const provider = this.createProvider(args.region);
+        // Use provided provider or create regional provider
+        const provider = opts?.provider as aws.Provider || this.createProvider(args.region);
 
         // Get availability zones for the region
         const azs = this.getAvailabilityZones(args.region, args.availabilityZoneCount, provider);

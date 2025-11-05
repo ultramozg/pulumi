@@ -301,6 +301,11 @@ export class DeploymentOrchestrator {
                 workDir: stackConfig.workDir
             });
             
+            // Set up role assumption if roleArn is provided
+            if (stackConfig.roleArn) {
+                await this.setupRoleAssumption(stackConfig.roleArn, stackConfig.name);
+            }
+            
             // Set stack configuration if provided
             const configValues: Record<string, automation.ConfigValue> = {};
             
@@ -463,6 +468,8 @@ export class DeploymentOrchestrator {
     ): void {
         // Set common configuration
         configValues['aws:region'] = { value: stackConfig.tags?.Region || deploymentConfig.defaultRegion || 'us-east-1' };
+        
+        // AWS role assumption is handled at the workspace level before deployment
         
         // Extract just the directory name from workDir, handling both relative and absolute paths
         const namespace = this.extractNamespaceFromWorkDir(stackConfig.workDir);
@@ -729,6 +736,37 @@ export class DeploymentOrchestrator {
             const duration = rollbackMonitor.end();
             this.logger?.rollbackComplete(false, duration);
             throw error;
+        }
+    }
+
+    /**
+     * Set up role assumption by configuring AWS credentials
+     */
+    private async setupRoleAssumption(roleArn: string, stackName: string): Promise<void> {
+        try {
+            const AWS = require('aws-sdk');
+            const sts = new AWS.STS();
+            
+            // Assume the role
+            const assumeRoleParams = {
+                RoleArn: roleArn,
+                RoleSessionName: `pulumi-${stackName}-${Date.now()}`,
+                DurationSeconds: 3600 // 1 hour
+            };
+            
+            const assumeRoleResult = await sts.assumeRole(assumeRoleParams).promise();
+            
+            // Set environment variables for the assumed role credentials
+            process.env.AWS_ACCESS_KEY_ID = assumeRoleResult.Credentials.AccessKeyId;
+            process.env.AWS_SECRET_ACCESS_KEY = assumeRoleResult.Credentials.SecretAccessKey;
+            process.env.AWS_SESSION_TOKEN = assumeRoleResult.Credentials.SessionToken;
+            
+            this.logger?.info(`Successfully assumed role: ${roleArn}`);
+            
+        } catch (error) {
+            const errorMessage = `Failed to assume role ${roleArn}: ${error}`;
+            this.logger?.error(errorMessage, error instanceof Error ? error : new Error(String(error)));
+            throw new Error(errorMessage);
         }
     }
 
