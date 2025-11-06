@@ -11,8 +11,8 @@
     {
       "name": "shared-services-primary",
       "workDir": "./shared-services",
-      "stackName": "shared-services",
-      "configFile": "Pulumi.shared-services.yaml",
+      "stackName": "shared-services-primary",
+      "configFile": "Pulumi.shared-services-primary.yaml",
       "description": "Shared services in primary region (us-east-1)",
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
       "components": [
@@ -90,8 +90,8 @@
     {
       "name": "workloads-primary",
       "workDir": "./workloads",
-      "stackName": "workloads",
-      "configFile": "Pulumi.workload.yaml",
+      "stackName": "workloads-primary",
+      "configFile": "Pulumi.workloads-primary.yaml",
       "description": "Workloads in primary region (us-east-1)",
       "dependencies": ["shared-services-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",
@@ -139,7 +139,7 @@
       "name": "workloads-secondary",
       "workDir": "./workloads",
       "stackName": "workloads-secondary",
-      "configFile": "Pulumi.workload-secondary.yaml",
+      "configFile": "Pulumi.workloads-secondary.yaml",
       "description": "Workloads in secondary region (us-west-2)",
       "dependencies": ["shared-services-secondary", "workloads-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",

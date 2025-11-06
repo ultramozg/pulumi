@@ -303,7 +303,7 @@ export class DeploymentOrchestrator {
             }
             
             const stack = await automation.LocalWorkspace.createOrSelectStack({
-                stackName: stackConfig.name,
+                stackName: stackConfig.stackName || stackConfig.name,
                 workDir: stackConfig.workDir
             });
             
@@ -446,9 +446,14 @@ export class DeploymentOrchestrator {
             console.log(`${'─'.repeat(60)}`);
             
             const stack = await automation.LocalWorkspace.createOrSelectStack({
-                stackName: stackConfig.name,
+                stackName: stackConfig.stackName || stackConfig.name,
                 workDir: stackConfig.workDir
             });
+            
+            // Set up role assumption if roleArn is provided (CRITICAL for cross-account destroy)
+            if (stackConfig.roleArn) {
+                await this.setupRoleAssumption(stackConfig.roleArn, stackConfig.name);
+            }
             
             // Show destruction output
             let lastDestroyOutput = '';
