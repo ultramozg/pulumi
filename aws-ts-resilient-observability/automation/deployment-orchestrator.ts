@@ -1,4 +1,5 @@
 import * as automation from "@pulumi/pulumi/automation";
+import * as path from 'path';
 import { DependencyResolver } from './dependency-resolver';
 import { ConfigManager } from './config-manager';
 import { 
@@ -299,6 +300,7 @@ export class DeploymentOrchestrator {
             // Show stack header
             if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
                 console.log(`\n📦 Deploying: ${stackConfig.name}`);
+                console.log(`🔐 Policy enforcement: enabled (advisory mode)`);
                 console.log(`${'─'.repeat(60)}`);
             }
             
@@ -345,7 +347,10 @@ export class DeploymentOrchestrator {
             if (options?.dryRun) {
                 // Show preview with cleaner formatting
                 let lastPreviewOutput = '';
+                // Get absolute path to policies directory (relative to project root)
+                const policiesPath = path.resolve(__dirname, '..', 'policies');
                 const previewResult = await stack.preview({
+                    policyPacks: [policiesPath],
                     onOutput: (out) => {
                         if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
                             // Filter out progress updates, empty lines, and repetitive output
@@ -379,7 +384,10 @@ export class DeploymentOrchestrator {
                 }
                 // Show Pulumi output with cleaner formatting
                 let lastOutput = '';
+                // Get absolute path to policies directory (relative to project root)
+                const policiesPath = path.resolve(__dirname, '..', 'policies');
                 const result = await stack.up({
+                    policyPacks: [policiesPath],
                     onOutput: (out) => {
                         if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
                             // Filter out progress updates, empty lines, and repetitive output
