@@ -572,7 +572,12 @@ export class DeploymentOrchestrator {
                 if (component.config) {
                     // Convert component config to Pulumi config format
                     Object.entries(component.config).forEach(([key, value]) => {
-                        configValues[`${namespace}:${key}`] = { value: String(value) };
+                        // Handle arrays and objects by JSON stringifying them
+                        if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+                            configValues[`${namespace}:${key}`] = { value: JSON.stringify(value) };
+                        } else {
+                            configValues[`${namespace}:${key}`] = { value: String(value) };
+                        }
                     });
                 }
             });

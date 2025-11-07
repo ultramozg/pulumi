@@ -21,3 +21,7 @@ config:
   shared-services:managedby: pulumi
   shared-services:project: resilient-observability
   shared-services:region: us-east-1
+  shared-services:ipamCidrBlocks: '["10.0.0.0/8"]'
+  shared-services:ipamOperatingRegions: '["us-east-1","us-west-2"]'
+  shared-services:ipamRegionalPoolNetmask: "12"
+  shared-services:ipamVpcAllocationNetmask: "16"

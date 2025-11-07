@@ -17,6 +17,17 @@
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
       "components": [
         {
+          "type": "ipam",
+          "name": "primary-ipam",
+          "config": {
+            "region": "us-east-1",
+            "ipamCidrBlocks": ["10.0.0.0/8"],
+            "ipamOperatingRegions": ["us-east-1", "us-west-2"],
+            "ipamRegionalPoolNetmask": 12,
+            "ipamVpcAllocationNetmask": 16
+          }
+        },
+        {
           "type": "transit-gateway",
           "name": "primary-tgw",
           "config": {

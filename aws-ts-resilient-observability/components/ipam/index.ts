@@ -10,6 +10,8 @@ export interface IPAMComponentArgs extends BaseComponentArgs {
     cidrBlocks: string[];
     shareWithOrganization: boolean;
     operatingRegions: string[];
+    regionalPoolNetmask?: number;  // Netmask length for regional pool allocations (default: 12)
+    vpcAllocationNetmask?: number;  // Default netmask for VPC allocations (default: 16)
 }
 
 /**
@@ -155,16 +157,58 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
         // The 'locale' parameter specifies which region the pool serves
         // Do NOT use regional providers for pool creation
         
+        const resourceName = this.getResourceName();
+        
+        // Create a top-level pool with the CIDR blocks
+        const topLevelPool = new aws.ec2.VpcIpamPool(
+            `${resourceName}-top-level-pool`,
+            {
+                ipamScopeId: this.scope.id,
+                description: `Top-level IPAM pool for ${resourceName}`,
+                addressFamily: "ipv4",
+                tags: this.mergeTags({
+                    Name: `${resourceName}-top-level-pool`,
+                    Purpose: "TopLevelIPAllocation"
+                })
+            },
+            {
+                parent: this,
+                dependsOn: [this.scope]
+            }
+        );
+
+        // Add CIDR blocks to the top-level pool
+        const topLevelPoolCidrs: aws.ec2.VpcIpamPoolCidr[] = [];
+        args.cidrBlocks.forEach((cidr, index) => {
+            const poolCidr = new aws.ec2.VpcIpamPoolCidr(
+                `${resourceName}-top-level-cidr-${index}`,
+                {
+                    ipamPoolId: topLevelPool.id,
+                    cidr: cidr
+                },
+                {
+                    parent: this,
+                    dependsOn: [topLevelPool]
+                }
+            );
+            topLevelPoolCidrs.push(poolCidr);
+        });
+        
+        // Get configuration with defaults
+        const regionalPoolNetmask = args.regionalPoolNetmask ?? 12;
+        const vpcAllocationNetmask = args.vpcAllocationNetmask ?? 16;
+        
+        // Create regional pools as children of the top-level pool
         args.operatingRegions.forEach(region => {
-            // Create pool for this region
-            const resourceName = this.getResourceName();
             const pool = new aws.ec2.VpcIpamPool(
                 `${resourceName}-pool-${region}`,
                 {
                     ipamScopeId: this.scope.id,
+                    sourceIpamPoolId: topLevelPool.id,  // Child pool inherits from parent
                     description: `IPAM pool for region ${region}`,
                     addressFamily: "ipv4",
                     locale: region,  // This specifies which region the pool serves
+                    allocationDefaultNetmaskLength: vpcAllocationNetmask,  // Default netmask for VPC allocations
                     tags: this.mergeTags({
                         Name: `${resourceName}-pool-${region}`,
                         Region: region,
@@ -173,31 +217,30 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
                 },
                 {
                     parent: this,
-                    // Use IPAM's home region provider, not the locale region
-                    dependsOn: [this.scope]  // Ensure scope is fully created first
+                    // Regional pools depend on top-level pool and its CIDRs being provisioned
+                    dependsOn: [topLevelPool, ...topLevelPoolCidrs]
                 }
             );
 
-            // Add CIDR blocks to the pool
-            const poolCidrs: aws.ec2.VpcIpamPoolCidr[] = [];
-            args.cidrBlocks.forEach((cidr, index) => {
-                const poolCidr = new aws.ec2.VpcIpamPoolCidr(
-                    `${resourceName}-pool-cidr-${region}-${index}`,
-                    {
-                        ipamPoolId: pool.id,
-                        cidr: cidr
-                    },
-                    {
-                        parent: this,
-                        // Pool CIDRs also created in IPAM's home region
-                        dependsOn: [pool]
-                    }
-                );
-                poolCidrs.push(poolCidr);
-            });
+            // Allocate a CIDR from the parent pool to this regional pool
+            // This makes the regional pool ready to allocate to VPCs
+            const regionalPoolCidrs: aws.ec2.VpcIpamPoolCidr[] = [];
+            const regionalCidr = new aws.ec2.VpcIpamPoolCidr(
+                `${resourceName}-pool-cidr-${region}`,
+                {
+                    ipamPoolId: pool.id,
+                    // Let IPAM automatically allocate from parent pool
+                    netmaskLength: regionalPoolNetmask
+                },
+                {
+                    parent: this,
+                    dependsOn: [pool, ...topLevelPoolCidrs]
+                }
+            );
+            regionalPoolCidrs.push(regionalCidr);
 
             this.pools[region] = pool;
-            this.poolCidrs[region] = poolCidrs;
+            this.poolCidrs[region] = regionalPoolCidrs;
         });
     }
 

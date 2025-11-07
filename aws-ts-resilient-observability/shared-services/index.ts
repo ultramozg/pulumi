@@ -23,12 +23,20 @@ let ipamPoolId: pulumi.Output<string> | undefined;
 let ipamPoolDependencies: pulumi.Resource[] = [];
 
 if (isPrimary) {
+    // Get IPAM configuration from config
+    const ipamCidrBlocks = config.getObject<string[]>("ipamCidrBlocks") ?? ["10.0.0.0/8"];
+    const ipamOperatingRegions = config.getObject<string[]>("ipamOperatingRegions") ?? ["us-east-1", "us-west-2"];
+    const ipamRegionalPoolNetmask = config.getNumber("ipamRegionalPoolNetmask") ?? 12;
+    const ipamVpcAllocationNetmask = config.getNumber("ipamVpcAllocationNetmask") ?? 16;
+    
     // Create IPAM only in primary region
     ipam = new IPAMComponent(`ipam-primary`, {
         region: currentRegion,
-        cidrBlocks: ["10.0.0.0/8"], // Large CIDR block for all VPCs across regions
+        cidrBlocks: ipamCidrBlocks,
         shareWithOrganization: false, // Set to true if using AWS Organizations
-        operatingRegions: ["us-east-1", "us-west-2"], // Primary and secondary regions
+        operatingRegions: ipamOperatingRegions,
+        regionalPoolNetmask: ipamRegionalPoolNetmask,  // Size of regional pool allocations
+        vpcAllocationNetmask: ipamVpcAllocationNetmask,  // Default size for VPC allocations
         tags: {
             Name: `shared-services-ipam`,
             Purpose: "CentralizedIPManagement",
