@@ -9,8 +9,8 @@ import { NetworkingOutputs, SubnetSpec } from "../interfaces";
 export interface VPCComponentArgs extends BaseComponentArgs {
     /** AWS region for VPC deployment */
     region: string;
-    /** IPAM pool ARN for automatic CIDR allocation */
-    ipamPoolArn?: string;
+    /** IPAM pool ID for automatic CIDR allocation */
+    ipamPoolId?: pulumi.Input<string>;
     /** Manual CIDR block if IPAM is not used */
     cidrBlock?: string;
     /** Base subnet CIDR for subnet calculation (e.g., "10.0.0.0/16") */
@@ -76,14 +76,14 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
         validateRegion(args.region, "VPCComponent");
         validateRequired(args.subnets, "subnets", "VPCComponent");
 
-        // Validate that either IPAM pool ARN, CIDR block, or base subnet is provided
-        if (!args.ipamPoolArn && !args.cidrBlock && !args.baseSubnet) {
-            throw new Error("VPCComponent: Either ipamPoolArn, cidrBlock, or baseSubnet must be provided");
+        // Validate that either IPAM pool ID, CIDR block, or base subnet is provided
+        if (!args.ipamPoolId && !args.cidrBlock && !args.baseSubnet) {
+            throw new Error("VPCComponent: Either ipamPoolId, cidrBlock, or baseSubnet must be provided");
         }
 
-        const providedOptions = [args.ipamPoolArn, args.cidrBlock, args.baseSubnet].filter(Boolean).length;
+        const providedOptions = [args.ipamPoolId, args.cidrBlock, args.baseSubnet].filter(Boolean).length;
         if (providedOptions > 1) {
-            throw new Error("VPCComponent: Cannot specify more than one of ipamPoolArn, cidrBlock, or baseSubnet");
+            throw new Error("VPCComponent: Cannot specify more than one of ipamPoolId, cidrBlock, or baseSubnet");
         }
 
         // Validate availability zone count
@@ -202,10 +202,10 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             })
         };
 
-        if (args.ipamPoolArn) {
+        if (args.ipamPoolId) {
             // Use IPAM for automatic CIDR allocation
-            vpcArgs.ipv4IpamPoolId = args.ipamPoolArn;
-            vpcArgs.ipv4NetmaskLength = 24; // Default to /24, can be made configurable
+            vpcArgs.ipv4IpamPoolId = args.ipamPoolId;
+            vpcArgs.ipv4NetmaskLength = 16; // Default to /16 for VPC, can be made configurable
         } else if (args.baseSubnet) {
             // Use base subnet as VPC CIDR
             vpcArgs.cidrBlock = args.baseSubnet;

@@ -2,6 +2,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { TransitGateway } from "../components/transitGateway";
 import { VPCComponent } from "../components/vpc";
+import { IPAMComponent } from "../components/ipam";
 // import { EKSComponent } from "../components/eks";
 
 // Get configuration from deployment config (set by automation)
@@ -16,6 +17,48 @@ const transitGatewayAsn = config.requireNumber("asn");
 const hubVpcCidr = config.require("cidrBlock");
 // const eksClusterName = config.require("clusterName");
 
+// Create IPAM in primary region for centralized IP address management
+let ipam: IPAMComponent | undefined;
+let ipamPoolId: pulumi.Output<string> | undefined;
+let ipamPoolDependencies: pulumi.Resource[] = [];
+
+if (isPrimary) {
+    // Create IPAM only in primary region
+    ipam = new IPAMComponent(`ipam-primary`, {
+        region: currentRegion,
+        cidrBlocks: ["10.0.0.0/8"], // Large CIDR block for all VPCs across regions
+        shareWithOrganization: false, // Set to true if using AWS Organizations
+        operatingRegions: ["us-east-1", "us-west-2"], // Primary and secondary regions
+        tags: {
+            Name: `shared-services-ipam`,
+            Purpose: "CentralizedIPManagement",
+            IsPrimary: "true"
+        }
+    });
+
+    // Get the IPAM pool resources (pool + CIDRs) for the current region
+    const poolResources = ipam.getPoolResources(currentRegion);
+    ipamPoolId = poolResources.pool.id;
+    
+    // VPC must wait for IPAM pool CIDRs to be provisioned
+    ipamPoolDependencies = [poolResources.pool, ...poolResources.cidrs];
+} else {
+    // Secondary region: Import IPAM pool ID from primary region stack
+    const primaryStack = new pulumi.StackReference("shared-services-primary");
+    const primaryIpamPoolIds = primaryStack.getOutput("ipamPoolIds");
+    
+    // Extract the pool ID for the current (secondary) region
+    ipamPoolId = pulumi.output(primaryIpamPoolIds).apply((pools: any) => {
+        if (!pools || !pools[currentRegion]) {
+            throw new Error(`IPAM pool not found for region ${currentRegion} in primary stack`);
+        }
+        return pools[currentRegion] as string;
+    });
+    
+    console.log(`Secondary region ${currentRegion} will use IPAM pool from primary region`);
+    // Secondary region doesn't need explicit dependencies since it imports from primary
+}
+
 // Create Transit Gateway for network connectivity
 const transitGateway = new TransitGateway(`transit-gateway-${currentRegion}`, {
     description: `Transit Gateway for shared services in ${currentRegion}`,
@@ -28,9 +71,10 @@ const transitGateway = new TransitGateway(`transit-gateway-${currentRegion}`, {
 });
 
 // Create Hub VPC for shared services
+// Both primary and secondary regions use IPAM for automatic CIDR allocation
 const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
     region: currentRegion,
-    cidrBlock: hubVpcCidr,
+    ipamPoolId: ipamPoolId, // Use IPAM pool from primary region (works for both regions)
     internetGatewayEnabled: true,
     natGatewayEnabled: true,
     availabilityZoneCount: 3,
@@ -51,6 +95,9 @@ const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
         Region: currentRegion,
         IsPrimary: isPrimary.toString()
     }
+}, {
+    // In primary region, VPC must wait for IPAM pool CIDRs to be provisioned
+    dependsOn: ipamPoolDependencies.length > 0 ? ipamPoolDependencies : undefined
 });
 
 // Attach Hub VPC to Transit Gateway
@@ -171,7 +218,9 @@ if (isPrimary && isCrossAccount && enableRamSharing) {
 } else if (isPrimary && isCrossAccount) {
     console.log(`Cross-account deployment detected but RAM sharing disabled. Set enableRamSharing=true to enable.`);
     console.log(`Shared Services (${sharedServicesAccountId}) -> Workloads (${workloadsAccountId})`);
-    console.log(`Transit Gateway ID will be shared via stack outputs: ${transitGateway.transitGateway.id}`);
+    transitGateway.transitGateway.id.apply(id => 
+        console.log(`Transit Gateway ID will be shared via stack outputs: ${id}`)
+    );
 } else if (isPrimary) {
     console.log("Single-account deployment detected - Transit Gateway will be shared directly without RAM");
 } else {
@@ -192,3 +241,9 @@ export const ramShareArn = ramShare?.arn;
 export const isCrossAccountDeployment = isCrossAccount;
 export const region = currentRegion;
 export const isPrimaryRegion = isPrimary;
+
+// Export IPAM resources (only available in primary region)
+export const ipamId = ipam?.ipamId;
+export const ipamArn = ipam?.ipamArn;
+export const ipamPoolIds = ipam?.poolIds;
+export const ipamScopeId = ipam?.scopeId;

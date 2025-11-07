@@ -37,6 +37,7 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
     private readonly ipam: aws.ec2.VpcIpam;
     private readonly scope: aws.ec2.VpcIpamScope;
     private readonly pools: { [region: string]: aws.ec2.VpcIpamPool } = {};
+    private readonly poolCidrs: { [region: string]: aws.ec2.VpcIpamPoolCidr[] } = {};
 
     constructor(
         name: string,
@@ -150,10 +151,11 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
      * Create IPAM pools for each operating region
      */
     private createIPAMPools(args: IPAMComponentArgs): void {
+        // IMPORTANT: IPAM pools must be created in the IPAM's home region (args.region)
+        // The 'locale' parameter specifies which region the pool serves
+        // Do NOT use regional providers for pool creation
+        
         args.operatingRegions.forEach(region => {
-            // Create provider for the specific region
-            const regionProvider = this.createProvider(region);
-
             // Create pool for this region
             const resourceName = this.getResourceName();
             const pool = new aws.ec2.VpcIpamPool(
@@ -162,7 +164,7 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
                     ipamScopeId: this.scope.id,
                     description: `IPAM pool for region ${region}`,
                     addressFamily: "ipv4",
-                    locale: region,
+                    locale: region,  // This specifies which region the pool serves
                     tags: this.mergeTags({
                         Name: `${resourceName}-pool-${region}`,
                         Region: region,
@@ -171,13 +173,15 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
                 },
                 {
                     parent: this,
-                    provider: regionProvider
+                    // Use IPAM's home region provider, not the locale region
+                    dependsOn: [this.scope]  // Ensure scope is fully created first
                 }
             );
 
             // Add CIDR blocks to the pool
+            const poolCidrs: aws.ec2.VpcIpamPoolCidr[] = [];
             args.cidrBlocks.forEach((cidr, index) => {
-                new aws.ec2.VpcIpamPoolCidr(
+                const poolCidr = new aws.ec2.VpcIpamPoolCidr(
                     `${resourceName}-pool-cidr-${region}-${index}`,
                     {
                         ipamPoolId: pool.id,
@@ -185,12 +189,15 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
                     },
                     {
                         parent: this,
-                        provider: regionProvider
+                        // Pool CIDRs also created in IPAM's home region
+                        dependsOn: [pool]
                     }
                 );
+                poolCidrs.push(poolCidr);
             });
 
             this.pools[region] = pool;
+            this.poolCidrs[region] = poolCidrs;
         });
     }
 
@@ -286,6 +293,19 @@ export class IPAMComponent extends BaseAWSComponent implements IPAMComponentOutp
             throw new Error(`IPAMComponent: No pool found for region ${region}`);
         }
         return pool.id;
+    }
+
+    /**
+     * Get IPAM pool resources (pool + CIDRs) for a specific region
+     * Use this when you need to ensure CIDRs are provisioned before using the pool
+     */
+    public getPoolResources(region: string): { pool: aws.ec2.VpcIpamPool; cidrs: aws.ec2.VpcIpamPoolCidr[] } {
+        const pool = this.pools[region];
+        const cidrs = this.poolCidrs[region];
+        if (!pool || !cidrs) {
+            throw new Error(`IPAMComponent: No pool resources found for region ${region}`);
+        }
+        return { pool, cidrs };
     }
 
     /**
