@@ -52,7 +52,9 @@ if (isPrimary) {
     ipamPoolDependencies = [poolResources.pool, ...poolResources.cidrs];
 } else {
     // Secondary region: Import IPAM pool ID from primary region stack
-    const primaryStack = new pulumi.StackReference("shared-services-primary");
+    const org = pulumi.getOrganization();
+    const project = pulumi.getProject();
+    const primaryStack = new pulumi.StackReference(`${org}/${project}/shared-services-primary`);
     const primaryIpamPoolIds = primaryStack.getOutput("ipamPoolIds");
     
     // Extract the pool ID for the current (secondary) region

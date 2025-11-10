@@ -135,7 +135,6 @@ export abstract class BaseAWSComponent extends pulumi.ComponentResource {
         const baseTags = {
             Component: componentType,
             ManagedBy: "Pulumi",
-            CreatedAt: new Date().toISOString(),
             Stack: pulumi.getStack(),
             Project: pulumi.getProject()
         };

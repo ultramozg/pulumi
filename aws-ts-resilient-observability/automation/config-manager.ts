@@ -163,6 +163,10 @@ export class ConfigManager {
         content = content.replace(/\$\{([A-Z_][A-Z0-9_]*)\}/g, (match, varName) => {
             const value = process.env[varName];
             if (value === undefined) {
+                // For role ARNs, return empty string if not defined (optional cross-account)
+                if (varName.includes('ROLE_ARN')) {
+                    return '';
+                }
                 throw new Error(`Environment variable ${varName} is not defined`);
             }
             return value;
@@ -172,6 +176,10 @@ export class ConfigManager {
         content = content.replace(/\$([A-Z_][A-Z0-9_]*)\b/g, (match, varName) => {
             const value = process.env[varName];
             if (value === undefined) {
+                // For role ARNs, return empty string if not defined (optional cross-account)
+                if (varName.includes('ROLE_ARN')) {
+                    return '';
+                }
                 throw new Error(`Environment variable ${varName} is not defined`);
             }
             return value;
