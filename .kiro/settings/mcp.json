@@ -2,22 +2,31 @@
   "mcpServers": {
     "fetch": {
       "command": "uvx",
-      "args": ["mcp-server-fetch"],
+      "args": [
+        "mcp-server-fetch"
+      ],
       "env": {},
       "disabled": true,
       "autoApprove": []
     },
     "browsermcp": {
       "command": "npx",
-      "args": ["@browsermcp/mcp@latest"]
+      "args": [
+        "@browsermcp/mcp@latest"
+      ],
+      "disabled": false
     },
     "aws-knowledge-mcp-server": {
       "url": "https://knowledge-mcp.global.api.aws",
-      "type": "http"
+      "disabled": false,
+      "autoApprove": [
+        "aws___read_documentation",
+        "aws___search_documentation"
+      ]
     },
     "pulumi": {
-      "transport": "http",
-      "url": "https://mcp.ai.pulumi.com/mcp"
+      "url": "https://mcp.ai.pulumi.com/mcp",
+      "disabled": false
     }
   }
 }
