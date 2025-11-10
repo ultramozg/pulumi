@@ -678,4 +678,51 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
 
         return pulumi.all(matchingSubnets);
     }
+
+    /**
+     * Attach this VPC to a Transit Gateway
+     * @param transitGatewayId The Transit Gateway ID to attach to
+     * @param options Optional configuration for the attachment
+     * @returns The Transit Gateway VPC attachment
+     */
+    public attachToTransitGateway(
+        transitGatewayId: pulumi.Input<string>,
+        options?: {
+            /** Subnet type to use for attachment (default: 'private') */
+            subnetType?: 'public' | 'private' | 'transit-gateway';
+            /** Custom tags for the attachment */
+            tags?: { [key: string]: string };
+        }
+    ): aws.ec2transitgateway.VpcAttachment {
+        const subnetType = options?.subnetType || 'private';
+        const attachmentName = `${this.getResourceName()}-tgw-attachment`;
+        
+        this.logger.info(`Attaching VPC to Transit Gateway using ${subnetType} subnets`);
+        
+        const attachment = new aws.ec2transitgateway.VpcAttachment(
+            attachmentName,
+            {
+                transitGatewayId: transitGatewayId,
+                vpcId: this.vpcId,
+                subnetIds: this.getSubnetIdsByType(subnetType),
+                tags: this.mergeTags({
+                    Name: attachmentName,
+                    Purpose: "TransitGatewayConnectivity",
+                    ...options?.tags
+                })
+            },
+            {
+                parent: this,
+                deleteBeforeReplace: true,
+                customTimeouts: {
+                    create: "10m",
+                    delete: "10m"
+                }
+            }
+        );
+        
+        this.logger.info(`VPC attached to Transit Gateway successfully`);
+        
+        return attachment;
+    }
 }

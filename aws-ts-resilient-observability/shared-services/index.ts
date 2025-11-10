@@ -3,6 +3,7 @@ import * as aws from "@pulumi/aws";
 import { TransitGateway } from "../components/transitGateway";
 import { VPCComponent } from "../components/vpc";
 import { IPAMComponent } from "../components/ipam";
+import { RAMShareComponent } from "../components/ram-share";
 // import { EKSComponent } from "../components/eks";
 
 // Get configuration from deployment config (set by automation)
@@ -14,13 +15,37 @@ const isPrimary = config.get("isprimary") === "true";
 
 // All configuration comes from deployment-config.json via automation
 const transitGatewayAsn = config.requireNumber("asn");
-const hubVpcCidr = config.require("cidrBlock");
 // const eksClusterName = config.require("clusterName");
 
-// Create IPAM in primary region for centralized IP address management
+// ============================================================================
+// PRIMARY REGION RESOURCES
+// ============================================================================
 let ipam: IPAMComponent | undefined;
 let ipamPoolId: pulumi.Output<string> | undefined;
 let ipamPoolDependencies: pulumi.Resource[] = [];
+let ramShare: aws.ram.ResourceShare | undefined;
+let tgwResourceAssociation: aws.ram.ResourceAssociation | undefined;
+
+// Check if cross-account sharing is needed
+const workloadsRoleArn = process.env.WORKLOADS_ROLE_ARN;
+const sharedServicesRoleArn = process.env.SHARED_SERVICES_ROLE_ARN;
+const workloadsAccountId = workloadsRoleArn ? workloadsRoleArn.split(':')[4] : undefined;
+const sharedServicesAccountId = sharedServicesRoleArn ? sharedServicesRoleArn.split(':')[4] : undefined;
+const isCrossAccount = workloadsAccountId && sharedServicesAccountId && workloadsAccountId !== sharedServicesAccountId;
+const enableRamSharing = config.getBoolean("enableRamSharing") ?? false;
+
+// Secondary region: Create stack reference to primary (reused for IPAM and TGW peering)
+let primaryStack: pulumi.StackReference | undefined;
+let primaryRegion: string | undefined;
+
+if (!isPrimary) {
+    const org = pulumi.getOrganization();
+    const project = pulumi.getProject();
+    primaryStack = new pulumi.StackReference(`primary-stack-ref`, {
+        name: `${org}/${project}/shared-services-primary`
+    });
+    primaryRegion = config.require("primaryRegion");
+}
 
 if (isPrimary) {
     // Get IPAM configuration from config
@@ -35,8 +60,8 @@ if (isPrimary) {
         cidrBlocks: ipamCidrBlocks,
         shareWithOrganization: false, // Set to true if using AWS Organizations
         operatingRegions: ipamOperatingRegions,
-        regionalPoolNetmask: ipamRegionalPoolNetmask,  // Size of regional pool allocations
-        vpcAllocationNetmask: ipamVpcAllocationNetmask,  // Default size for VPC allocations
+        regionalPoolNetmask: ipamRegionalPoolNetmask,
+        vpcAllocationNetmask: ipamVpcAllocationNetmask,
         tags: {
             Name: `shared-services-ipam`,
             Purpose: "CentralizedIPManagement",
@@ -47,15 +72,12 @@ if (isPrimary) {
     // Get the IPAM pool resources (pool + CIDRs) for the current region
     const poolResources = ipam.getPoolResources(currentRegion);
     ipamPoolId = poolResources.pool.id;
-    
-    // VPC must wait for IPAM pool CIDRs to be provisioned
     ipamPoolDependencies = [poolResources.pool, ...poolResources.cidrs];
+    
+    console.log(`Primary region ${currentRegion}: IPAM created for centralized IP management`);
 } else {
     // Secondary region: Import IPAM pool ID from primary region stack
-    const org = pulumi.getOrganization();
-    const project = pulumi.getProject();
-    const primaryStack = new pulumi.StackReference(`${org}/${project}/shared-services-primary`);
-    const primaryIpamPoolIds = primaryStack.getOutput("ipamPoolIds");
+    const primaryIpamPoolIds = primaryStack!.getOutput("ipamPoolIds");
     
     // Extract the pool ID for the current (secondary) region
     ipamPoolId = pulumi.output(primaryIpamPoolIds).apply((pools: any) => {
@@ -65,9 +87,12 @@ if (isPrimary) {
         return pools[currentRegion] as string;
     });
     
-    console.log(`Secondary region ${currentRegion} will use IPAM pool from primary region`);
-    // Secondary region doesn't need explicit dependencies since it imports from primary
+    console.log(`Secondary region ${currentRegion}: Using IPAM pool from primary region`);
 }
+
+// ============================================================================
+// COMMON RESOURCES (Both Primary and Secondary)
+// ============================================================================
 
 // Create Transit Gateway for network connectivity
 const transitGateway = new TransitGateway(`transit-gateway-${currentRegion}`, {
@@ -110,21 +135,11 @@ const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
     dependsOn: ipamPoolDependencies.length > 0 ? ipamPoolDependencies : undefined
 });
 
-// Attach Hub VPC to Transit Gateway
-const hubVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`hub-vpc-attachment-${currentRegion}`, {
-    transitGatewayId: transitGateway.transitGateway.id,
-    vpcId: hubVpc.vpcId,
-    subnetIds: hubVpc.getSubnetIdsByType('private'),
+// Attach Hub VPC to Transit Gateway using the VPC component method
+const hubVpcAttachment = hubVpc.attachToTransitGateway(transitGateway.transitGateway.id, {
+    subnetType: 'private',
     tags: {
-        Name: `hub-vpc-attachment-${currentRegion}`,
         Region: currentRegion
-    }
-}, {
-    // Ensure proper deletion order
-    deleteBeforeReplace: true,
-    customTimeouts: {
-        create: "10m",
-        delete: "10m"
     }
 });
 
@@ -158,83 +173,59 @@ const hubVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`hub-vpc-attach
 //     }
 // });
 
-// Share Transit Gateway with workloads account via RAM (only for cross-account scenarios)
-let ramShare: aws.ram.ResourceShare | undefined;
-let tgwResourceAssociation: aws.ram.ResourceAssociation | undefined;
+// ============================================================================
+// PRIMARY REGION - RAM SHARING
+// ============================================================================
 
-// Check if cross-account sharing is needed
-const workloadsRoleArn = process.env.WORKLOADS_ROLE_ARN;
-const sharedServicesRoleArn = process.env.SHARED_SERVICES_ROLE_ARN;
-
-let workloadsAccountId: string | undefined;
-let sharedServicesAccountId: string | undefined;
-
-if (workloadsRoleArn) {
-    const arnParts = workloadsRoleArn.split(':');
-    if (arnParts.length >= 5) {
-        workloadsAccountId = arnParts[4];
+if (isPrimary) {
+    // Share Transit Gateway with workloads account via RAM (cross-account only)
+    if (isCrossAccount && enableRamSharing) {
+        console.log(`Primary region: Enabling RAM sharing - Shared Services (${sharedServicesAccountId}) -> Workloads (${workloadsAccountId})`);
+        
+        const ramShareComponent = new RAMShareComponent(`tgw-ram-${currentRegion}`, {
+            name: `transit-gateway-share-${currentRegion}`,
+            transitGatewayArn: transitGateway.transitGateway.arn,
+            workloadsAccountId: workloadsAccountId,
+            region: currentRegion,
+            tags: {
+                Environment: "production",
+                ManagedBy: "Pulumi"
+            }
+        });
+        
+        ramShare = ramShareComponent.resourceShare;
+        tgwResourceAssociation = ramShareComponent.resourceAssociation;
+    } else if (isCrossAccount) {
+        console.log(`Primary region: RAM sharing disabled. Set enableRamSharing=true to enable cross-account sharing.`);
+    } else {
+        console.log(`Primary region: Single-account deployment - Transit Gateway shared via stack outputs`);
     }
 }
 
-if (sharedServicesRoleArn) {
-    const arnParts = sharedServicesRoleArn.split(':');
-    if (arnParts.length >= 5) {
-        sharedServicesAccountId = arnParts[4];
-    }
-}
+// ============================================================================
+// SECONDARY REGION - TRANSIT GATEWAY PEERING
+// ============================================================================
+let tgwPeering: { 
+    peeringAttachment: aws.ec2transitgateway.PeeringAttachment;
+    peeringAccepter: aws.ec2transitgateway.PeeringAttachmentAccepter;
+} | undefined;
 
-// Only create RAM resources if we have different accounts and we're in primary region
-const isCrossAccount = workloadsAccountId && sharedServicesAccountId && workloadsAccountId !== sharedServicesAccountId;
-
-// For now, disable RAM sharing to avoid deletion issues
-// TODO: Re-enable once RAM resources are properly cleaned up
-const enableRamSharing = config.getBoolean("enableRamSharing") ?? false;
-
-if (isPrimary && isCrossAccount && enableRamSharing) {
-    console.log(`Cross-account deployment detected: Shared Services (${sharedServicesAccountId}) -> Workloads (${workloadsAccountId})`);
+if (!isPrimary) {
+    // Create Transit Gateway peering to primary region using the component method
+    const primaryTgwId = primaryStack!.getOutput("transitGatewayId");
+    console.log(`Secondary region: Creating Transit Gateway peering to ${primaryRegion!}`);
     
-    ramShare = new aws.ram.ResourceShare(`tgw-share-${currentRegion}`, {
-        name: `transit-gateway-share-${currentRegion}`,
-        allowExternalPrincipals: true,
+    tgwPeering = transitGateway.createPeering(`tgw-${currentRegion}`, {
+        peerTransitGatewayId: primaryTgwId,
+        peerRegion: primaryRegion!,
+        currentRegion: currentRegion,
         tags: {
-            Name: `tgw-share-${currentRegion}`,
-            Purpose: "cross-account-networking"
+            Environment: "production",
+            ManagedBy: "Pulumi"
         }
     });
-
-    tgwResourceAssociation = new aws.ram.ResourceAssociation(`tgw-resource-association-${currentRegion}`, {
-        resourceArn: transitGateway.transitGateway.arn,
-        resourceShareArn: ramShare.arn
-    }, {
-        dependsOn: [ramShare],
-        deleteBeforeReplace: true,
-        customTimeouts: {
-            delete: "10m"
-        }
-    });
-
-    // Associate with workloads account
-    new aws.ram.PrincipalAssociation(`tgw-principal-association-${currentRegion}`, {
-        principal: workloadsAccountId!,
-        resourceShareArn: ramShare.arn
-    }, {
-        dependsOn: [ramShare, tgwResourceAssociation],
-        deleteBeforeReplace: true,
-        customTimeouts: {
-            create: "10m",
-            delete: "15m"
-        }
-    });
-} else if (isPrimary && isCrossAccount) {
-    console.log(`Cross-account deployment detected but RAM sharing disabled. Set enableRamSharing=true to enable.`);
-    console.log(`Shared Services (${sharedServicesAccountId}) -> Workloads (${workloadsAccountId})`);
-    transitGateway.transitGateway.id.apply(id => 
-        console.log(`Transit Gateway ID will be shared via stack outputs: ${id}`)
-    );
-} else if (isPrimary) {
-    console.log("Single-account deployment detected - Transit Gateway will be shared directly without RAM");
-} else {
-    console.log("Secondary region - no RAM sharing needed");
+    
+    console.log(`Secondary region: Transit Gateway peering established with ${primaryRegion!}`);
 }
 
 // Export important values for cross-stack references
@@ -257,3 +248,7 @@ export const ipamId = ipam?.ipamId;
 export const ipamArn = ipam?.ipamArn;
 export const ipamPoolIds = ipam?.poolIds;
 export const ipamScopeId = ipam?.scopeId;
+
+// Export Transit Gateway peering resources (only available in secondary region)
+export const tgwPeeringAttachmentId = tgwPeering?.peeringAttachment.id;
+export const tgwPeeringState = tgwPeering?.peeringAttachment.state;
