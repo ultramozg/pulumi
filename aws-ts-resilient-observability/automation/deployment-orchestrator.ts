@@ -8,18 +8,18 @@ import {
     DeploymentResult, 
     DeploymentSummary
 } from './types';
-import { validateRoleAssumption } from '../components/utils/aws-provider';
+import { validateRoleAssumption } from '../components/shared/utils/aws-provider';
 import { 
     DeploymentLogger, 
     MetricsCollector, 
     PerformanceMonitor 
-} from '../components/utils/logging';
+} from '../components/shared/utils/logging';
 import { 
     ErrorHandler, 
     RecoveryStrategy, 
     RecoveryOptions,
     ComponentError
-} from '../components/utils/error-handling';
+} from '../components/shared/utils/error-handling';
 
 /**
  * Deployment orchestration logic for run-all functionality

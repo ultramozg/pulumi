@@ -10,7 +10,7 @@ import {
     createCrossAccountProvider, 
     getCachedProvider,
     validateRoleAssumption 
-} from '../components/utils/aws-provider';
+} from "../components/shared/utils/aws-provider';
 
 // Example role ARNs
 const sharedServicesRoleArn = "arn:aws:iam::123456789012:role/PulumiExecutionRole";

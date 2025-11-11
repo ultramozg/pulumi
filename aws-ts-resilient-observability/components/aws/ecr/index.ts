@@ -1,7 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion } from "../base";
-import { StorageOutputs } from "../interfaces";
+import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion } from "../../shared/base";
+import { StorageOutputs } from "../../shared/interfaces";
 
 /**
  * ECR Repository specification

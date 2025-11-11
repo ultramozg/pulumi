@@ -1,6 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { BaseAWSComponent, BaseComponentArgs, validateRequired } from "../base";
+import { BaseAWSComponent, BaseComponentArgs, validateRequired } from "../../shared/base";
 
 /**
  * DNS record specification

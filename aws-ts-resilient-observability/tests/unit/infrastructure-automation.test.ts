@@ -1,5 +1,5 @@
 import { InfrastructureAutomation } from '../../index';
-import { RecoveryStrategy } from '../../components/utils/error-handling';
+import { RecoveryStrategy } from "../components/shared/utils/error-handling';
 
 describe('InfrastructureAutomation', () => {
     let automation: InfrastructureAutomation;

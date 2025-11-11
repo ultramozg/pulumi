@@ -6,13 +6,13 @@ import {
     ComponentLogger, 
     PerformanceMonitor,
     DeploymentLogger 
-} from "../components/utils/logging";
+} from "../components/shared/utils/logging";
 import { 
     ErrorHandler, 
     RecoveryStrategy, 
     ValidationUtils,
     ComponentError 
-} from "../components/utils/error-handling";
+} from "../components/shared/utils/error-handling";
 
 /**
  * Example demonstrating comprehensive error handling and logging

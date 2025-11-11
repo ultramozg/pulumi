@@ -1,7 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion } from "../base";
-import { ComputeOutputs } from "../interfaces";
+import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion } from "../../shared/base";
+import { ComputeOutputs } from "../../shared/interfaces";
 
 /**
  * EKS Node Group configuration

@@ -1,9 +1,9 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { VPCComponent } from "../components/vpc";
-import { EKSComponent } from "../components/eks";
-import { RDSGlobalComponent } from "../components/rds";
-import { Route53Component } from "../components/route53";
+import { VPCComponent } from "../components/aws/vpc";
+import { EKSComponent } from "../components/aws/eks";
+import { RDSGlobalComponent } from "../components/aws/rds";
+import { Route53Component } from "../components/aws/route53";
 
 // Get configuration
 const config = new pulumi.Config("workloads");

@@ -1,10 +1,10 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { TransitGateway } from "../components/transitGateway";
-import { VPCComponent } from "../components/vpc";
-import { IPAMComponent } from "../components/ipam";
-import { RAMShareComponent } from "../components/ram-share";
-// import { EKSComponent } from "../components/eks";
+import { TransitGateway } from "../components/aws/transit-gateway";
+import { VPCComponent } from "../components/aws/vpc";
+import { IPAMComponent } from "../components/aws/ipam";
+import { RAMShareComponent } from "../components/aws/ram-share";
+// import { EKSComponent } from "../components/aws/eks";
 
 // Get configuration from deployment config (set by automation)
 const config = new pulumi.Config("shared-services");

@@ -1,6 +1,6 @@
 import * as automation from "@pulumi/pulumi/automation";
 import { DeploymentOrchestrator, ConfigManager, DeploymentConfig, DeploymentSummary } from './automation';
-import { RecoveryStrategy } from './components/utils/error-handling';
+import { RecoveryStrategy } from "./components/shared/utils/error-handling";
 import * as path from 'path';
 
 /**

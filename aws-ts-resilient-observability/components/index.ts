@@ -1,23 +1,10 @@
 /**
  * Main components export file
- * This file exports all available components for easy importing
+ * Organized by cloud provider for better scalability
  */
 
-// Base classes and interfaces
-export * from "./base";
-export * from "./interfaces";
+// Shared components (cloud-agnostic)
+export * from './shared';
 
-// Individual components will be exported here as they are implemented
-export * from "./ecr";
-export * from "./ipam";
-export * from "./vpc";
-export * from "./route53";
-export * from "./acm";
-export * from "./rds";
-export * from "./eks";
-
-// Existing components
-export * from "./transitGateway";
-
-// Component utilities
-export * from "./utils";
+// AWS components
+export * from './aws';

@@ -7,7 +7,7 @@ import {
     ErrorHandler,
     RecoveryStrategy,
     ValidationUtils
-} from '../../components/utils/error-handling';
+} from "../components/shared/utils/error-handling';
 
 describe('Error Handling', () => {
     describe('ComponentError', () => {

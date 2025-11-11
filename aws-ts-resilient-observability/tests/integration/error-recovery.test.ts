@@ -2,7 +2,7 @@ import * as automation from "@pulumi/pulumi/automation";
 import * as path from "path";
 import { DeploymentOrchestrator } from '../../automation/deployment-orchestrator';
 import { DeploymentConfig } from '../../automation/types';
-import { RecoveryStrategy } from '../../components/utils/error-handling';
+import { RecoveryStrategy } from "../components/shared/utils/error-handling';
 
 describe('Error Recovery Integration Tests', () => {
     let orchestrator: DeploymentOrchestrator;

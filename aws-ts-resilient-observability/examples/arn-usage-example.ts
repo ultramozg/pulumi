@@ -6,7 +6,7 @@
  * environment variables.
  */
 
-import { extractAccountIdFromArn, getAccountIdFromEnv, parseArn } from '../components/utils';
+import { extractAccountIdFromArn, getAccountIdFromEnv, parseArn } from "../components/shared/utils';
 
 // Example 1: Extract account ID from environment variable containing role ARN
 function getSharedServicesAccountId(): string {

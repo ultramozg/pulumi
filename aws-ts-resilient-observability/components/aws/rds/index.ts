@@ -1,7 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion, ComponentValidationError } from "../base";
-import { SecurityGroupRule } from "../interfaces";
+import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion, ComponentValidationError } from "../../shared/base";
+import { SecurityGroupRule } from "../../shared/interfaces";
 
 /**
  * Security group rule specification for RDS
