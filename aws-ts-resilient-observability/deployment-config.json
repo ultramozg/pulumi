@@ -32,8 +32,20 @@
           "name": "primary-tgw",
           "config": {
             "region": "us-east-1",
-            "asn": 64512
-          }
+            "asn": 64512,
+            "enableRouteTableIsolation": true,
+            "routingGroups": {
+              "production": {
+                "description": "Production workloads",
+                "allowedGroups": [],
+                "tags": {
+                  "Environment": "Production",
+                  "Criticality": "Critical"
+                }
+              }
+            }
+          },
+          "notes": "To add more routing groups (dev, test, staging), add them to routingGroups. Hub is automatic. Example: 'development': { 'allowedGroups': ['test'] }"
         },
         {
           "type": "hub-vpc",
@@ -72,8 +84,20 @@
           "name": "secondary-tgw",
           "config": {
             "region": "us-west-2",
-            "asn": 64513
-          }
+            "asn": 64513,
+            "enableRouteTableIsolation": true,
+            "routingGroups": {
+              "production": {
+                "description": "Production workloads",
+                "allowedGroups": [],
+                "tags": {
+                  "Environment": "Production",
+                  "Criticality": "Critical"
+                }
+              }
+            }
+          },
+          "notes": "To add more routing groups (dev, test, staging), add them to routingGroups. Hub is automatic. Example: 'development': { 'allowedGroups': ['test'] }"
         },
         {
           "type": "hub-vpc",
@@ -112,7 +136,8 @@
           "name": "primary-spoke-vpc",
           "config": {
             "region": "us-east-1",
-            "cidrBlock": "10.1.0.0/16"
+            "cidrBlock": "10.1.0.0/16",
+            "routingGroup": "production"
           }
         },
         {
@@ -160,7 +185,8 @@
           "name": "secondary-spoke-vpc",
           "config": {
             "region": "us-west-2",
-            "cidrBlock": "10.3.0.0/16"
+            "cidrBlock": "10.3.0.0/16",
+            "routingGroup": "production"
           }
         },
         {

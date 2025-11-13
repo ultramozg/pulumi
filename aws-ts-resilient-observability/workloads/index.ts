@@ -19,9 +19,13 @@ const eksClusterName = config.require("eksClusterName");
 const rdsGlobalClusterIdentifier = config.require("rdsGlobalClusterIdentifier");
 const route53HostedZone = config.require("route53HostedZone");
 
-// Get shared services Transit Gateway ID from stack reference or environment
+// Get shared services Transit Gateway ID and routing configuration from stack reference
 const sharedServicesStackRef = new pulumi.StackReference(`shared-services-${currentRegion}`);
 const transitGatewayId = sharedServicesStackRef.getOutput("transitGatewayId");
+const transitGatewayIsolationEnabled = sharedServicesStackRef.getOutput("transitGatewayIsolationEnabled");
+
+// Get routing group for this workload VPC (default to "production" if not specified)
+const workloadRoutingGroup = config.get("routingGroup") ?? "production";
 
 // Create Spoke VPC for workloads
 const spokeVpc = new VPCComponent(`spoke-vpc-${currentRegion}`, {
@@ -50,18 +54,35 @@ const spokeVpc = new VPCComponent(`spoke-vpc-${currentRegion}`, {
     tags: {
         Name: `workloads-spoke-vpc-${currentRegion}`,
         Region: currentRegion,
-        IsPrimary: isPrimary.toString()
+        IsPrimary: isPrimary.toString(),
+        RoutingGroup: workloadRoutingGroup
     }
 });
 
 // Create Transit Gateway attachment for spoke VPC
-const spokeVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`spoke-vpc-attachment-${currentRegion}`, {
+// Check if routing groups are enabled in shared services
+let spokeVpcAttachment: aws.ec2transitgateway.VpcAttachment;
+
+pulumi.output(transitGatewayIsolationEnabled).apply(isolationEnabled => {
+    if (isolationEnabled) {
+        console.log(`${currentRegion}: Routing groups enabled - attaching workload VPC to '${workloadRoutingGroup}' routing group`);
+    } else {
+        console.log(`${currentRegion}: Using default Transit Gateway route table`);
+    }
+});
+
+// Create VPC attachment with routing group support
+spokeVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`spoke-vpc-attachment-${currentRegion}`, {
     transitGatewayId: transitGatewayId,
     vpcId: spokeVpc.vpcId,
     subnetIds: spokeVpc.getSubnetIdsByType("private"),
+    // Disable default route table when using routing groups
+    transitGatewayDefaultRouteTableAssociation: false,
+    transitGatewayDefaultRouteTablePropagation: false,
     tags: {
         Name: `spoke-vpc-attachment-${currentRegion}`,
-        Region: currentRegion
+        Region: currentRegion,
+        RoutingGroup: workloadRoutingGroup
     }
 });
 

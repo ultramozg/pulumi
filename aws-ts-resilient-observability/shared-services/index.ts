@@ -94,10 +94,16 @@ if (isPrimary) {
 // COMMON RESOURCES (Both Primary and Secondary)
 // ============================================================================
 
-// Create Transit Gateway for network connectivity
+// Get routing groups configuration from config (optional)
+const enableRouteTableIsolation = config.getBoolean("enableRouteTableIsolation") ?? false;
+const routingGroupsConfig = config.getObject<{ [key: string]: { allowedGroups?: string[]; description?: string; tags?: { [key: string]: string } } }>("routingGroups");
+
+// Create Transit Gateway for network connectivity with routing groups
 const transitGateway = new TransitGateway(`transit-gateway-${currentRegion}`, {
     description: `Transit Gateway for shared services in ${currentRegion}`,
     amazonSideAsn: transitGatewayAsn,
+    enableRouteTableIsolation: enableRouteTableIsolation,
+    routingGroups: routingGroupsConfig,
     tags: {
         Name: `shared-services-tgw-${currentRegion}`,
         Region: currentRegion,
@@ -128,20 +134,29 @@ const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
     tags: {
         Name: `shared-services-hub-vpc-${currentRegion}`,
         Region: currentRegion,
-        IsPrimary: isPrimary.toString()
+        IsPrimary: isPrimary.toString(),
+        RoutingGroup: "hub"
     }
 }, {
     // In primary region, VPC must wait for IPAM pool CIDRs to be provisioned
     dependsOn: ipamPoolDependencies.length > 0 ? ipamPoolDependencies : undefined
 });
 
-// Attach Hub VPC to Transit Gateway using the VPC component method
-const hubVpcAttachment = hubVpc.attachToTransitGateway(transitGateway.transitGateway.id, {
-    subnetType: 'private',
+// Attach Hub VPC to Transit Gateway
+// When routing groups are enabled, this attaches to the automatic "hub" routing group
+// When disabled, this uses the default Transit Gateway route table
+const hubVpcAttachment = transitGateway.attachVpc(`hub-vpc-attachment-${currentRegion}`, {
+    vpcId: hubVpc.vpcId,
+    subnetIds: hubVpc.getSubnetIdsByType('private'),
+    routingGroup: "hub",
     tags: {
-        Region: currentRegion
+        Name: `hub-vpc-attachment-${currentRegion}`,
+        Region: currentRegion,
+        Purpose: "SharedServices"
     }
 });
+
+console.log(`${currentRegion}: Hub VPC attached to Transit Gateway${enableRouteTableIsolation ? ' with routing group isolation' : ' (default route table)'}`);
 
 // Create EKS cluster for shared monitoring services
 // const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
@@ -231,10 +246,13 @@ if (!isPrimary) {
 // Export important values for cross-stack references
 export const transitGatewayId = transitGateway.transitGateway.id;
 export const transitGatewayArn = transitGateway.transitGateway.arn;
+export const transitGatewayIsolationEnabled = enableRouteTableIsolation;
+export const transitGatewayRoutingGroups = enableRouteTableIsolation ? transitGateway.getRoutingGroups() : [];
 export const hubVpcId = hubVpc.vpcId;
 export const hubVpcCidrBlock = hubVpc.cidrBlock;
 export const hubPrivateSubnetIds = hubVpc.getSubnetIdsByType('private');
 export const hubPublicSubnetIds = hubVpc.getSubnetIdsByType('public');
+export const hubVpcAttachmentId = hubVpcAttachment.id;
 // export const eksClusterId = sharedEksCluster.clusterName;
 // export const eksClusterEndpoint = sharedEksCluster.clusterEndpoint;
 // export const eksClusterArn = sharedEksCluster.clusterArn;
