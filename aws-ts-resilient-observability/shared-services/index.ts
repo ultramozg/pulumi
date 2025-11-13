@@ -4,7 +4,7 @@ import { TransitGateway } from "../components/aws/transit-gateway";
 import { VPCComponent } from "../components/aws/vpc";
 import { IPAMComponent } from "../components/aws/ipam";
 import { RAMShareComponent } from "../components/aws/ram-share";
-// import { EKSComponent } from "../components/aws/eks";
+import { EKSComponent } from "../components/aws/eks";
 
 // Get configuration from deployment config (set by automation)
 const config = new pulumi.Config("shared-services");
@@ -15,7 +15,7 @@ const isPrimary = config.get("isprimary") === "true";
 
 // All configuration comes from deployment-config.json via automation
 const transitGatewayAsn = config.requireNumber("asn");
-// const eksClusterName = config.require("clusterName");
+const eksClusterName = config.require("clusterName");
 
 // ============================================================================
 // PRIMARY REGION RESOURCES
@@ -159,34 +159,35 @@ const hubVpcAttachment = transitGateway.attachVpc(`hub-vpc-attachment-${currentR
 console.log(`${currentRegion}: Hub VPC attached to Transit Gateway${enableRouteTableIsolation ? ' with routing group isolation' : ' (default route table)'}`);
 
 // Create EKS cluster for shared monitoring services
-// const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
-//     region: currentRegion,
-//     clusterName: eksClusterName,
-//     vpcId: hubVpc.vpcId,
-//     subnetIds: hubVpc.getSubnetIdsByType('private'),
-//     autoModeEnabled: false,
-//     addons: ["vpc-cni", "coredns", "kube-proxy", "aws-load-balancer-controller"],
-//     nodeGroups: [
-//         {
-//             name: "monitoring-nodes",
-//             instanceTypes: ["m5.large", "m5.xlarge"],
-//             scalingConfig: {
-//                 minSize: 2,
-//                 maxSize: 10,
-//                 desiredSize: 3
-//             },
-//             tags: {
-//                 "node-type": "monitoring"
-//             }
-//         }
-//     ],
-//     tags: {
-//         Name: eksClusterName,
-//         Region: currentRegion,
-//         IsPrimary: isPrimary.toString(),
-//         Purpose: "shared-monitoring"
-//     }
-// });
+const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
+    region: currentRegion,
+    clusterName: eksClusterName,
+    version: "1.34",
+    vpcId: hubVpc.vpcId,
+    subnetIds: hubVpc.getSubnetIdsByType('private'),
+    autoModeEnabled: false,
+    addons: ["vpc-cni", "coredns", "kube-proxy", "aws-load-balancer-controller"],
+    nodeGroups: [
+        {
+            name: "monitoring-nodes",
+            instanceTypes: ["m5.large", "m5.xlarge"],
+            scalingConfig: {
+                minSize: 2,
+                maxSize: 10,
+                desiredSize: 3
+            },
+            tags: {
+                "node-type": "monitoring"
+            }
+        }
+    ],
+    tags: {
+        Name: eksClusterName,
+        Region: currentRegion,
+        IsPrimary: isPrimary.toString(),
+        Purpose: "shared-monitoring"
+    }
+});
 
 // ============================================================================
 // PRIMARY REGION - RAM SHARING
@@ -253,9 +254,9 @@ export const hubVpcCidrBlock = hubVpc.cidrBlock;
 export const hubPrivateSubnetIds = hubVpc.getSubnetIdsByType('private');
 export const hubPublicSubnetIds = hubVpc.getSubnetIdsByType('public');
 export const hubVpcAttachmentId = hubVpcAttachment.id;
-// export const eksClusterId = sharedEksCluster.clusterName;
-// export const eksClusterEndpoint = sharedEksCluster.clusterEndpoint;
-// export const eksClusterArn = sharedEksCluster.clusterArn;
+export const eksClusterId = sharedEksCluster.clusterName;
+export const eksClusterEndpoint = sharedEksCluster.clusterEndpoint;
+export const eksClusterArn = sharedEksCluster.clusterArn;
 export const ramShareArn = ramShare?.arn;
 export const isCrossAccountDeployment = isCrossAccount;
 export const region = currentRegion;
