@@ -12,12 +12,12 @@ const basicVpc = new VPCComponent("basic-vpc", {
         public: {
             type: 'public',
             cidrPrefix: 8, // /24 subnets
-            availabilityZones: ["us-east-1a", "us-east-1b"]
+            availabilityZones: 2  // Create 2 subnets (one per AZ)
         },
         private: {
             type: 'private',
             cidrPrefix: 8, // /24 subnets
-            availabilityZones: ["us-east-1a", "us-east-1b"]
+            availabilityZones: 2  // Create 2 subnets (one per AZ)
         }
     },
     tags: {
@@ -47,12 +47,12 @@ const ipamVpc = new VPCComponent("ipam-vpc", {
         public: {
             type: 'public',
             cidrPrefix: 8,
-            availabilityZones: ["us-east-1a", "us-east-1b", "us-east-1c"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         },
         private: {
             type: 'private',
             cidrPrefix: 8,
-            availabilityZones: ["us-east-1a", "us-east-1b", "us-east-1c"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         }
     },
     tags: {

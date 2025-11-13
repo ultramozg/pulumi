@@ -51,9 +51,9 @@
           "type": "hub-vpc",
           "name": "primary-hub-vpc",
           "config": {
-            "region": "us-east-1",
-            "cidrBlock": "10.0.0.0/16"
-          }
+            "region": "us-east-1"
+          },
+          "notes": "CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask"
         },
         {
           "type": "shared-eks",
@@ -103,9 +103,9 @@
           "type": "hub-vpc",
           "name": "secondary-hub-vpc",
           "config": {
-            "region": "us-west-2",
-            "cidrBlock": "10.2.0.0/16"
-          }
+            "region": "us-west-2"
+          },
+          "notes": "CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask"
         },
         {
           "type": "shared-eks",
@@ -136,9 +136,9 @@
           "name": "primary-spoke-vpc",
           "config": {
             "region": "us-east-1",
-            "cidrBlock": "10.1.0.0/16",
             "routingGroup": "production"
-          }
+          },
+          "notes": "CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask"
         },
         {
           "type": "workload-eks",
@@ -185,9 +185,9 @@
           "name": "secondary-spoke-vpc",
           "config": {
             "region": "us-west-2",
-            "cidrBlock": "10.3.0.0/16",
             "routingGroup": "production"
-          }
+          },
+          "notes": "CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask"
         },
         {
           "type": "workload-eks",

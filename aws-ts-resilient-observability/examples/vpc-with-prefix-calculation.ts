@@ -34,21 +34,21 @@ const vpc = new VPCComponent("example-vpc", {
         "public": {
             type: "public",
             subnetPrefix: 24,  // /24 = 256 IPs per subnet
-            availabilityZones: ["a", "b", "c"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         },
         
         // Private subnets with /24 prefix (256 IPs each)
         "private": {
             type: "private", 
             subnetPrefix: 24,  // /24 = 256 IPs per subnet
-            availabilityZones: ["a", "b", "c"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         },
         
         // Database subnets with /26 prefix (64 IPs each)
         "database": {
             type: "private",
             subnetPrefix: 26,  // /26 = 64 IPs per subnet
-            availabilityZones: ["a", "b", "c"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         }
     },
     

@@ -270,7 +270,12 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
         let subnetOffset = 0;
 
         Object.entries(args.subnets).forEach(([subnetName, spec]) => {
-            spec.availabilityZones.forEach((_, azIndex) => {
+            // Support both number (count) and array (backward compatibility)
+            const azCount = typeof spec.availabilityZones === 'number' 
+                ? spec.availabilityZones 
+                : spec.availabilityZones.length;
+            
+            for (let azIndex = 0; azIndex < azCount; azIndex++) {
                 const subnetKey = `${subnetName}-${azIndex}`;
 
                 // Calculate CIDR block for this subnet with proper offset
@@ -297,10 +302,10 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 );
 
                 this.subnets[subnetKey] = subnet;
-            });
+            }
 
             // Increment offset for next subnet type
-            subnetOffset += spec.availabilityZones.length;
+            subnetOffset += azCount;
         });
     }
 
@@ -633,11 +638,16 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 throw new Error(`VPCComponent: Either subnetPrefix or cidrPrefix must be specified for ${name}`);
             }
 
-            if (!spec.availabilityZones || spec.availabilityZones.length === 0) {
+            // Support both number and array format
+            const subnetAzCount = typeof spec.availabilityZones === 'number' 
+                ? spec.availabilityZones 
+                : spec.availabilityZones.length;
+
+            if (subnetAzCount === 0) {
                 throw new Error(`VPCComponent: No availability zones specified for ${name}`);
             }
 
-            if (spec.availabilityZones.length > azCount) {
+            if (subnetAzCount > azCount) {
                 throw new Error(`VPCComponent: Too many availability zones specified for ${name} (max: ${azCount})`);
             }
         });

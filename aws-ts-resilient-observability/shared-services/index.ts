@@ -123,12 +123,12 @@ const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
         public: {
             type: "public",
             subnetPrefix: 24,
-            availabilityZones: ["0", "1", "2"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         },
         private: {
             type: "private", 
             subnetPrefix: 24,
-            availabilityZones: ["0", "1", "2"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         }
     },
     tags: {

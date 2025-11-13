@@ -26,7 +26,8 @@ export interface SubnetSpec {
     subnetPrefix: number;
     /** Number of host bits (deprecated, use subnetPrefix instead) */
     cidrPrefix?: number;
-    availabilityZones: string[];
+    /** Number of subnets to create (one per AZ) or array of AZ indices for backward compatibility */
+    availabilityZones: number | string[];
 }
 
 /**

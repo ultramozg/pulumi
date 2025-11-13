@@ -14,23 +14,31 @@ const secondaryRegion = config.require("secondaryRegion");
 const currentRegion = awsConfig.require("region");
 const isPrimary = config.getBoolean("isPrimary") ?? (currentRegion === primaryRegion);
 
-const spokeVpcCidr = config.require("spokeVpcCidr");
 const eksClusterName = config.require("eksClusterName");
 const rdsGlobalClusterIdentifier = config.require("rdsGlobalClusterIdentifier");
 const route53HostedZone = config.require("route53HostedZone");
 
-// Get shared services Transit Gateway ID and routing configuration from stack reference
+// Get shared services Transit Gateway ID, IPAM pool, and routing configuration from stack reference
 const sharedServicesStackRef = new pulumi.StackReference(`shared-services-${currentRegion}`);
 const transitGatewayId = sharedServicesStackRef.getOutput("transitGatewayId");
 const transitGatewayIsolationEnabled = sharedServicesStackRef.getOutput("transitGatewayIsolationEnabled");
+const ipamPoolIds = sharedServicesStackRef.getOutput("ipamPoolIds");
+
+// Extract IPAM pool ID for current region
+const ipamPoolId = pulumi.output(ipamPoolIds).apply((pools: any) => {
+    if (!pools || !pools[currentRegion]) {
+        throw new Error(`IPAM pool not found for region ${currentRegion} in shared services stack`);
+    }
+    return pools[currentRegion] as string;
+});
 
 // Get routing group for this workload VPC (default to "production" if not specified)
 const workloadRoutingGroup = config.get("routingGroup") ?? "production";
 
-// Create Spoke VPC for workloads
+// Create Spoke VPC for workloads using IPAM for automatic CIDR allocation
 const spokeVpc = new VPCComponent(`spoke-vpc-${currentRegion}`, {
     region: currentRegion,
-    cidrBlock: spokeVpcCidr,
+    ipamPoolId: ipamPoolId, // Use IPAM pool from shared services
     internetGatewayEnabled: true,
     natGatewayEnabled: true,
     availabilityZoneCount: 3,
@@ -38,17 +46,17 @@ const spokeVpc = new VPCComponent(`spoke-vpc-${currentRegion}`, {
         public: {
             type: "public",
             subnetPrefix: 24,
-            availabilityZones: ["0", "1", "2"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         },
         private: {
             type: "private",
             subnetPrefix: 24,
-            availabilityZones: ["0", "1", "2"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         },
         database: {
             type: "private",
             subnetPrefix: 26,
-            availabilityZones: ["0", "1", "2"]
+            availabilityZones: 3  // Create 3 subnets (one per AZ)
         }
     },
     tags: {
