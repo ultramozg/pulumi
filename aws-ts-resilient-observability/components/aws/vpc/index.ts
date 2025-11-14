@@ -153,12 +153,12 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 subnetsByType[spec.type] = [];
             }
             // Add all subnets of this type (one per AZ)
-            spec.availabilityZones.forEach((_, index) => {
+            for (let index = 0; index < spec.availabilityZones; index++) {
                 const subnetKey = `${subnetName}-${index}`;
                 if (this.subnets[subnetKey]) {
                     subnetsByType[spec.type].push(this.subnets[subnetKey].id);
                 }
-            });
+            }
         });
 
         this.subnetsByType = pulumi.output(
@@ -270,12 +270,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
         let subnetOffset = 0;
 
         Object.entries(args.subnets).forEach(([subnetName, spec]) => {
-            // Support both number (count) and array (backward compatibility)
-            const azCount = typeof spec.availabilityZones === 'number' 
-                ? spec.availabilityZones 
-                : spec.availabilityZones.length;
-            
-            for (let azIndex = 0; azIndex < azCount; azIndex++) {
+            for (let azIndex = 0; azIndex < spec.availabilityZones; azIndex++) {
                 const subnetKey = `${subnetName}-${azIndex}`;
 
                 // Calculate CIDR block for this subnet with proper offset
@@ -305,7 +300,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             }
 
             // Increment offset for next subnet type
-            subnetOffset += azCount;
+            subnetOffset += spec.availabilityZones;
         });
     }
 
@@ -638,16 +633,11 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 throw new Error(`VPCComponent: Either subnetPrefix or cidrPrefix must be specified for ${name}`);
             }
 
-            // Support both number and array format
-            const subnetAzCount = typeof spec.availabilityZones === 'number' 
-                ? spec.availabilityZones 
-                : spec.availabilityZones.length;
-
-            if (subnetAzCount === 0) {
+            if (spec.availabilityZones === 0) {
                 throw new Error(`VPCComponent: No availability zones specified for ${name}`);
             }
 
-            if (subnetAzCount > azCount) {
+            if (spec.availabilityZones > azCount) {
                 throw new Error(`VPCComponent: Too many availability zones specified for ${name} (max: ${azCount})`);
             }
         });
