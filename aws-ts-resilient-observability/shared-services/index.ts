@@ -166,7 +166,7 @@ const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
     vpcId: hubVpc.vpcId,
     subnetIds: hubVpc.getSubnetIdsByType('private'),
     autoModeEnabled: false,
-    addons: ["vpc-cni", "coredns", "kube-proxy", "aws-load-balancer-controller"],
+    addons: ["vpc-cni", "coredns", "kube-proxy"],
     nodeGroups: [
         {
             name: "monitoring-nodes",

@@ -98,6 +98,7 @@ spokeVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`spoke-vpc-attachme
 const workloadEksCluster = new EKSComponent(`workload-eks-${currentRegion}`, {
     region: currentRegion,
     clusterName: eksClusterName,
+    version: "1.33",
     vpcId: spokeVpc.vpcId,
     subnetIds: spokeVpc.getSubnetIdsByType("private"),
     autoModeEnabled: false,

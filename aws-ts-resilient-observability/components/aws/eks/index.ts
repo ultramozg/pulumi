@@ -280,7 +280,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
     private createCluster(args: EKSComponentArgs): aws.eks.Cluster {
         const clusterConfig: aws.eks.ClusterArgs = {
             name: args.clusterName,
-            version: args.version || "1.31",
+            version: args.version || "1.34",
             roleArn: this.clusterRole.arn,
             vpcConfig: {
                 subnetIds: args.subnetIds || [],
@@ -425,7 +425,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
                     instanceTypes: nodeGroupConfig.instanceTypes,
                     scalingConfig: nodeGroupConfig.scalingConfig,
                     diskSize: nodeGroupConfig.diskSize || 20,
-                    amiType: nodeGroupConfig.amiType || "AL2_x86_64",
+                    amiType: nodeGroupConfig.amiType || "AL2023_x86_64_STANDARD",
                     capacityType: nodeGroupConfig.capacityType || "ON_DEMAND",
                     tags: this.mergeTags(nodeGroupConfig.tags)
                 },
