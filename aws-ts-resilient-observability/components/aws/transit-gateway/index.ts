@@ -1,5 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import { getProvider } from "../../shared/utils/provider-registry";
 
 /**
  * Routing group configuration for network segmentation
@@ -388,10 +389,8 @@ export class TransitGateway extends pulumi.ComponentResource {
             }
         );
 
-        // Create provider for peer region to accept the peering
-        const peerProvider = new aws.Provider(`${name}-peer-provider`, {
-            region: args.peerRegion
-        }, { parent: this });
+        // Get provider for peer region to accept the peering (uses registry for reuse)
+        const peerProvider = getProvider(args.peerRegion, this);
 
         // Accept the peering in the peer region
         const peeringAccepter = new aws.ec2transitgateway.PeeringAttachmentAccepter(

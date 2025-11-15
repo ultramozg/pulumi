@@ -10,6 +10,7 @@ import {
     ValidationError,
     ResourceCreationError
 } from "./utils/error-handling";
+import { getProvider } from "./utils/provider-registry";
 
 /**
  * Common configuration interface for all AWS components
@@ -197,40 +198,18 @@ export abstract class BaseAWSComponent extends pulumi.ComponentResource {
     }
 
     /**
-     * Helper method to create AWS provider for specific region with error handling
+     * Helper method to get or create AWS provider for specific region with error handling
+     * Uses the provider registry to ensure provider reuse across components
      */
     protected createProvider(region?: string): aws.Provider {
         const targetRegion = region || this.region;
         
-        this.logger.debug("Creating AWS provider", { region: targetRegion });
+        this.logger.debug("Getting AWS provider from registry", { region: targetRegion });
         
-        // Use a static name instead of this.urn which is an Output
-        const providerName = `${this.getResourceName()}-provider-${targetRegion}`;
-        
-        // Get AWS configuration from Pulumi config
-        const awsConfig = new pulumi.Config("aws");
-        const providerConfig: aws.ProviderArgs = {
-            region: targetRegion
-        };
+        // Use the provider registry to get or create a shared provider
+        const provider = getProvider(targetRegion, this);
 
-        // Check if assumeRoles is configured and add it to provider config
-        try {
-            const assumeRoles = awsConfig.getObject<aws.types.input.ProviderAssumeRole[]>("assumeRoles");
-            if (assumeRoles && assumeRoles.length > 0) {
-                providerConfig.assumeRoles = assumeRoles;
-                this.logger.debug("Provider configured with assumeRoles", { 
-                    region: targetRegion, 
-                    roleCount: assumeRoles.length 
-                });
-            }
-        } catch (error) {
-            // assumeRoles not configured, continue without it
-            this.logger.debug("No assumeRoles configuration found, using default credentials", { region: targetRegion });
-        }
-
-        const provider = new aws.Provider(providerName, providerConfig, { parent: this });
-
-        this.logger.debug("AWS provider created successfully", { region: targetRegion });
+        this.logger.debug("AWS provider retrieved successfully", { region: targetRegion });
         return provider;
     }
 
