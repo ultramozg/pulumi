@@ -8,3 +8,6 @@ export * from './shared';
 
 // AWS components
 export * from './aws';
+
+// Namecheap components
+export * from './namecheap';
