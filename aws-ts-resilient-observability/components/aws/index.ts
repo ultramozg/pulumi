@@ -4,6 +4,7 @@
  */
 
 // Export all AWS components
+export * from './acm';
 export * from './ecr';
 export * from './eks';
 export * from './ipam';
