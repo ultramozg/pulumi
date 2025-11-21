@@ -27,3 +27,9 @@ config:
   shared-services:ipamVpcAllocationNetmask: "16"
   shared-services:enableRouteTableIsolation: "true"
   shared-services:routingGroups: '{"production":{"description":"Production workloads","allowedGroups":[],"tags":{"Environment":"Production","Criticality":"Critical"}}}'
+  shared-services:baseDomain: internal.srelog.dev
+  shared-services:certificateValidationMethod: namecheap
+  shared-services:enableCertificates: "true"
+  shared-services:parentDomain: srelog.dev
+environment:
+  - namecheap-credentials

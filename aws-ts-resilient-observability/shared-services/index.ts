@@ -1,10 +1,13 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import * as namecheap from "pulumi-namecheap";
 import { TransitGateway } from "../components/aws/transit-gateway";
 import { VPCComponent } from "../components/aws/vpc";
 import { IPAMComponent } from "../components/aws/ipam";
 import { RAMShareComponent } from "../components/aws/ram-share";
 import { EKSComponent } from "../components/aws/eks";
+import { Route53HostedZoneComponent } from "../components/aws/route53";
+import { AcmCertificateComponent } from "../components/aws/acm";
 
 // Get configuration from deployment config (set by automation)
 const config = new pulumi.Config("shared-services");
@@ -244,6 +247,98 @@ if (!isPrimary) {
     console.log(`Secondary region: Transit Gateway peering established with ${primaryRegion!}`);
 }
 
+// ============================================================================
+// DNS AND CERTIFICATE SETUP
+// ============================================================================
+
+// DNS configuration from deployment-config.json (set by automation)
+const baseDomain = config.require("baseDomain");
+const parentDomain = config.require("parentDomain");
+const enableCertificates = config.requireBoolean("enableCertificates");
+const certificateValidationMethod = config.require("certificateValidationMethod");
+
+// Get Namecheap credentials from Pulumi ESC (only if using Namecheap validation)
+let namecheapProvider: namecheap.Provider | undefined;
+if (certificateValidationMethod === "namecheap") {
+    // Namecheap requires: username (account name) and API key
+    const username = config.requireSecret("username");
+    const apiKey = config.requireSecret("apiKey");
+
+    namecheapProvider = new namecheap.Provider("namecheap", {
+        apiUser: username,      // Your Namecheap account username
+        apiKey: apiKey,         // Your Namecheap API key
+        userName: username,     // Same as apiUser (account that owns the domain)
+        useSandbox: false,
+    });
+}
+
+console.log(`${currentRegion}: Setting up DNS and certificates for ${baseDomain}`);
+
+// Create private Route53 hosted zone for this region
+const zoneName = `${currentRegion}.${baseDomain}`;
+
+// Note: Route53 private zones need VPC ID as string array
+// We'll create the zone with the VPC ID from hubVpc
+const privateZone = hubVpc.vpcId.apply(vpcId => 
+    new Route53HostedZoneComponent(`${currentRegion}-internal-zone`, {
+        region: currentRegion,
+        hostedZones: [{
+            name: zoneName,
+            private: true,
+            vpcIds: [vpcId],
+            comment: `Private zone for ${currentRegion} internal services (Loki, Grafana, etc.)`,
+        }],
+        tags: {
+            Environment: "production",
+            Purpose: "internal-services",
+            Region: currentRegion,
+            IsPrimary: isPrimary.toString(),
+        },
+    })
+);
+
+console.log(`${currentRegion}: Private hosted zone will be created: ${zoneName}`);
+
+// Create ACM wildcard certificate (if enabled)
+let certificate: AcmCertificateComponent | undefined;
+if (enableCertificates) {
+    if (certificateValidationMethod === "namecheap" && !namecheapProvider) {
+        throw new Error("Namecheap provider is required when certificateValidationMethod is 'namecheap'");
+    }
+
+    // Build certificate args based on validation method
+    const certArgs: any = {
+        domainName: `*.${currentRegion}.${baseDomain}`,
+        validationMethod: certificateValidationMethod as "route53" | "namecheap" | "manual",
+        region: currentRegion,
+        tags: {
+            Environment: "production",
+            Purpose: "internal-services",
+            Region: currentRegion,
+            IsPrimary: isPrimary.toString(),
+            ValidationMethod: certificateValidationMethod,
+        },
+    };
+
+    // Add Namecheap validation config if using Namecheap
+    if (certificateValidationMethod === "namecheap" && namecheapProvider) {
+        certArgs.namecheapValidation = {
+            provider: namecheapProvider,
+            parentDomain: parentDomain,
+        };
+    }
+
+    certificate = new AcmCertificateComponent(
+        `${currentRegion}-wildcard-cert`,
+        certArgs
+    );
+
+    console.log(`${currentRegion}: ACM certificate requested for *.${currentRegion}.${baseDomain}`);
+    console.log(`${currentRegion}: Validation method: ${certificateValidationMethod}`);
+} else {
+    console.log(`${currentRegion}: Certificate creation disabled`);
+}
+
 // Export important values for cross-stack references
 export const transitGatewayId = transitGateway.transitGateway.id;
 export const transitGatewayArn = transitGateway.transitGateway.arn;
@@ -271,3 +366,17 @@ export const ipamScopeId = ipam?.scopeId;
 // Export Transit Gateway peering resources (only available in secondary region)
 export const tgwPeeringAttachmentId = tgwPeering?.peeringAttachment.id;
 export const tgwPeeringState = tgwPeering?.peeringAttachment.state;
+
+// Export DNS and Certificate resources
+export const privateZoneId = privateZone.apply(zone => zone.getHostedZoneId(zoneName));
+export const privateZoneName = zoneName;
+export const certificateArn = certificate?.certificateArn;
+export const internalDomain = `${currentRegion}.${baseDomain}`;
+
+// Export service endpoints (examples for documentation)
+export const lokiEndpoint = `loki.${zoneName}`;
+export const grafanaEndpoint = `grafana.${zoneName}`;
+export const prometheusEndpoint = `prometheus.${zoneName}`;
+
+// Export validation records if using manual validation
+export const certificateValidationRecords = certificate?.validationRecords;

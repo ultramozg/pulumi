@@ -62,6 +62,18 @@
             "region": "us-east-1",
             "clusterName": "shared-monitoring-cluster"
           }
+        },
+        {
+          "type": "dns",
+          "name": "primary-dns",
+          "config": {
+            "region": "us-east-1",
+            "baseDomain": "internal.srelog.dev",
+            "parentDomain": "srelog.dev",
+            "enableCertificates": true,
+            "certificateValidationMethod": "namecheap"
+          },
+          "notes": "Creates private Route53 zone and ACM certificate. Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'"
         }
       ],
       "tags": {
@@ -114,6 +126,18 @@
             "region": "us-west-2",
             "clusterName": "shared-monitoring-cluster-secondary"
           }
+        },
+        {
+          "type": "dns",
+          "name": "secondary-dns",
+          "config": {
+            "region": "us-west-2",
+            "baseDomain": "internal.srelog.dev",
+            "parentDomain": "srelog.dev",
+            "enableCertificates": true,
+            "certificateValidationMethod": "namecheap"
+          },
+          "notes": "Creates private Route53 zone and ACM certificate. Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'"
         }
       ],
       "tags": {
