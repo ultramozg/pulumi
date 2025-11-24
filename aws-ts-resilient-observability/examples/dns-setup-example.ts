@@ -20,9 +20,8 @@ const awsConfig = new pulumi.Config("aws");
 
 // Get Namecheap credentials from Pulumi ESC
 // These should be configured in your Pulumi ESC environment
-const namecheapApiUser = config.requireSecret("namecheapApiUser");
-const namecheapApiKey = config.requireSecret("namecheapApiKey");
-const namecheapUsername = config.requireSecret("namecheapUsername");
+const namecheapApiUser = config.requireSecret("apiUser");
+const namecheapApiKey = config.requireSecret("apiKey");
 
 // DNS configuration
 const parentDomain = "srelog.dev"; // Your domain in Namecheap
@@ -48,7 +47,7 @@ const awsProvider = new aws.Provider(`${currentRegion}-provider`, {
 const namecheapProvider = new namecheap.Provider("namecheap", {
     apiUser: namecheapApiUser,
     apiKey: namecheapApiKey,
-    userName: namecheapUsername,
+    userName: namecheapApiUser,  // Same as apiUser (account that owns the domain)
     useSandbox: false, // Set to true for testing
 });
 

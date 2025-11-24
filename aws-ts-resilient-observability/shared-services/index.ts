@@ -260,15 +260,14 @@ const certificateValidationMethod = config.require("certificateValidationMethod"
 // Get Namecheap credentials from Pulumi ESC (only if using Namecheap validation)
 let namecheapProvider: namecheap.Provider | undefined;
 if (certificateValidationMethod === "namecheap") {
-    // Namecheap requires: username (account name) and API key
-    const username = config.requireSecret("username");
+    const apiUser = config.requireSecret("apiUser");
     const apiKey = config.requireSecret("apiKey");
 
     namecheapProvider = new namecheap.Provider("namecheap", {
-        apiUser: username,      // Your Namecheap account username
-        apiKey: apiKey,         // Your Namecheap API key
-        userName: username,     // Same as apiUser (account that owns the domain)
-        useSandbox: false,
+        apiUser: apiUser,
+        apiKey: apiKey,
+        userName: apiUser,  // Same as apiUser (account that owns the domain)
+        useSandbox: config.getBoolean("namecheapUseSandbox") ?? false,
     });
 }
 
