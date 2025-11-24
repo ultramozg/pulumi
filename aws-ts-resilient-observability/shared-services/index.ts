@@ -27,7 +27,6 @@ let ipam: IPAMComponent | undefined;
 let ipamPoolId: pulumi.Output<string> | undefined;
 let ipamPoolDependencies: pulumi.Resource[] = [];
 let ramShare: aws.ram.ResourceShare | undefined;
-let tgwResourceAssociation: aws.ram.ResourceAssociation | undefined;
 
 // Check if cross-account sharing is needed
 const workloadsRoleArn = process.env.WORKLOADS_ROLE_ARN;
@@ -211,9 +210,8 @@ if (isPrimary) {
                 ManagedBy: "Pulumi"
             }
         });
-        
+
         ramShare = ramShareComponent.resourceShare;
-        tgwResourceAssociation = ramShareComponent.resourceAssociation;
     } else if (isCrossAccount) {
         console.log(`Primary region: RAM sharing disabled. Set enableRamSharing=true to enable cross-account sharing.`);
     } else {
@@ -276,25 +274,23 @@ console.log(`${currentRegion}: Setting up DNS and certificates for ${baseDomain}
 // Create private Route53 hosted zone for this region
 const zoneName = `${currentRegion}.${baseDomain}`;
 
-// Note: Route53 private zones need VPC ID as string array
-// We'll create the zone with the VPC ID from hubVpc
-const privateZone = hubVpc.vpcId.apply(vpcId => 
-    new Route53HostedZoneComponent(`${currentRegion}-internal-zone`, {
-        region: currentRegion,
-        hostedZones: [{
-            name: zoneName,
-            private: true,
-            vpcIds: [vpcId],
-            comment: `Private zone for ${currentRegion} internal services (Loki, Grafana, etc.)`,
-        }],
-        tags: {
-            Environment: "production",
-            Purpose: "internal-services",
-            Region: currentRegion,
-            IsPrimary: isPrimary.toString(),
-        },
-    })
-);
+// Route53HostedZoneComponent accepts pulumi.Input<string>[] for vpcIds
+// Pass the Output directly without using apply()
+const privateZone = new Route53HostedZoneComponent(`${currentRegion}-internal-zone`, {
+    region: currentRegion,
+    hostedZones: [{
+        name: zoneName,
+        private: true,
+        vpcIds: [hubVpc.vpcId],
+        comment: `Private zone for ${currentRegion} internal services (Loki, Grafana, etc.)`,
+    }],
+    tags: {
+        Environment: "production",
+        Purpose: "internal-services",
+        Region: currentRegion,
+        IsPrimary: isPrimary.toString(),
+    },
+});
 
 console.log(`${currentRegion}: Private hosted zone will be created: ${zoneName}`);
 
@@ -367,7 +363,7 @@ export const tgwPeeringAttachmentId = tgwPeering?.peeringAttachment.id;
 export const tgwPeeringState = tgwPeering?.peeringAttachment.state;
 
 // Export DNS and Certificate resources
-export const privateZoneId = privateZone.apply(zone => zone.getHostedZoneId(zoneName));
+export const privateZoneId = privateZone.getHostedZoneId(zoneName);
 export const privateZoneName = zoneName;
 export const certificateArn = certificate?.certificateArn;
 export const internalDomain = `${currentRegion}.${baseDomain}`;

@@ -9,7 +9,7 @@ import { ValidationUtils } from "../../../shared/utils/error-handling";
 export interface HostedZoneSpec {
     name: string;
     private?: boolean;
-    vpcIds?: string[];
+    vpcIds?: pulumi.Input<string>[];
     comment?: string;
     delegationSetId?: string;
     forceDestroy?: boolean;
@@ -96,6 +96,14 @@ export class Route53HostedZoneComponent extends BaseAWSComponent implements Rout
             });
 
             // Create hosted zone
+            // Handle VPC IDs - they may be pulumi.Output<string>
+            const vpcsConfig = zoneSpec.private && zoneSpec.vpcIds
+                ? zoneSpec.vpcIds.map(vpcId => ({
+                    vpcId: vpcId,
+                    vpcRegion: this.region
+                  }))
+                : undefined;
+
             const hostedZone = new aws.route53.Zone(
                 `${zoneSpec.name.replace(/\./g, "-")}-zone`,
                 {
@@ -103,10 +111,7 @@ export class Route53HostedZoneComponent extends BaseAWSComponent implements Rout
                     comment: zoneSpec.comment || `Managed by Pulumi - ${zoneSpec.name}`,
                     delegationSetId: zoneSpec.delegationSetId,
                     forceDestroy: zoneSpec.forceDestroy || false,
-                    vpcs: zoneSpec.private && zoneSpec.vpcIds ? zoneSpec.vpcIds.map(vpcId => ({
-                        vpcId: vpcId,
-                        vpcRegion: this.region
-                    })) : undefined,
+                    vpcs: vpcsConfig,
                     tags: zoneTags
                 },
                 {
@@ -144,14 +149,8 @@ export class Route53HostedZoneComponent extends BaseAWSComponent implements Rout
             throw new Error(`${this.getResourceType()}: Private hosted zone ${zoneSpec.name} requires at least one VPC ID`);
         }
 
-        // Validate VPC IDs format if provided
-        if (zoneSpec.vpcIds) {
-            zoneSpec.vpcIds.forEach((vpcId, vpcIndex) => {
-                if (!/^vpc-[a-f0-9]{8,17}$/.test(vpcId)) {
-                    throw new Error(`${this.getResourceType()}: Invalid VPC ID format for ${zoneId}.vpcIds[${vpcIndex}]: ${vpcId}`);
-                }
-            });
-        }
+        // Note: VPC ID format validation is skipped because vpcIds may be pulumi.Output<string>
+        // AWS will validate the format when the zone is created
 
         this.logger.debug("Hosted zone validation successful", {
             index,
