@@ -6,3 +6,4 @@
 // Export Route 53 components
 export * from './hosted-zone';
 export * from './records';
+export * from './vpc-association';

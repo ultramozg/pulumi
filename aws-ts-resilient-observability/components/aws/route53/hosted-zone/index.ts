@@ -198,4 +198,51 @@ export class Route53HostedZoneComponent extends BaseAWSComponent implements Rout
     public getHostedZoneNames(): string[] {
         return Object.keys(this.hostedZones);
     }
+
+    /**
+     * Associate additional VPCs with an existing hosted zone
+     * This is useful for cross-stack VPC associations where you want to associate
+     * a VPC from a different stack with a hosted zone created in this stack.
+     *
+     * @param zoneName The name of the hosted zone to associate with
+     * @param vpcId The VPC ID to associate
+     * @param associationName Optional custom name for the association resource
+     * @returns The VPC association resource
+     */
+    public associateVpc(
+        zoneName: string,
+        vpcId: pulumi.Input<string>,
+        associationName?: string
+    ): aws.route53.ZoneAssociation {
+        const hostedZone = this.hostedZones[zoneName];
+        if (!hostedZone) {
+            throw new Error(`Hosted zone ${zoneName} not found in Route53 component`);
+        }
+
+        const resourceName = associationName || `${zoneName.replace(/\./g, "-")}-vpc-association`;
+
+        this.logger.info("Creating VPC association for hosted zone", {
+            zoneName,
+            resourceName
+        });
+
+        const association = new aws.route53.ZoneAssociation(
+            resourceName,
+            {
+                zoneId: hostedZone.zoneId,
+                vpcId: vpcId,
+            },
+            {
+                parent: this,
+                provider: this.createProvider()
+            }
+        );
+
+        this.logger.info("VPC association created", {
+            zoneName,
+            resourceName
+        });
+
+        return association;
+    }
 }

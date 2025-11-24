@@ -3,7 +3,7 @@ import * as aws from "@pulumi/aws";
 import { VPCComponent } from "../components/aws/vpc";
 import { EKSComponent } from "../components/aws/eks";
 import { RDSGlobalComponent } from "../components/aws/rds";
-import { Route53Component } from "../components/aws/route53";
+import { Route53HostedZoneComponent, Route53RecordsComponent, Route53VpcAssociationComponent } from "../components/aws/route53";
 
 // Get configuration
 const config = new pulumi.Config("workloads");
@@ -18,11 +18,13 @@ const eksClusterName = config.require("eksClusterName");
 const rdsGlobalClusterIdentifier = config.require("rdsGlobalClusterIdentifier");
 const route53HostedZone = config.require("route53HostedZone");
 
-// Get shared services Transit Gateway ID, IPAM pool, and routing configuration from stack reference
+// Get shared services Transit Gateway ID, IPAM pool, routing configuration, and private hosted zone from stack reference
 const sharedServicesStackRef = new pulumi.StackReference(`shared-services-${currentRegion}`);
 const transitGatewayId = sharedServicesStackRef.getOutput("transitGatewayId");
 const transitGatewayIsolationEnabled = sharedServicesStackRef.getOutput("transitGatewayIsolationEnabled");
 const ipamPoolIds = sharedServicesStackRef.getOutput("ipamPoolIds");
+const privateZoneId = sharedServicesStackRef.getOutput("privateZoneId");
+const privateZoneName = sharedServicesStackRef.getOutput("privateZoneName");
 
 // Extract IPAM pool ID for current region
 const ipamPoolId = pulumi.output(ipamPoolIds).apply((pools: any) => {
@@ -66,6 +68,40 @@ const spokeVpc = new VPCComponent(`spoke-vpc-${currentRegion}`, {
         RoutingGroup: workloadRoutingGroup
     }
 });
+
+// ============================================================================
+// PRIVATE HOSTED ZONE ASSOCIATION
+// ============================================================================
+
+// Associate workload VPC with shared-services private hosted zone
+// This allows workloads to resolve internal service endpoints like:
+// - loki.us-east-1.internal.srelog.dev
+// - grafana.us-east-1.internal.srelog.dev
+// - prometheus.us-east-1.internal.srelog.dev
+const privateZoneAssociation = new Route53VpcAssociationComponent(`workload-zone-association-${currentRegion}`, {
+    region: currentRegion,
+    associations: [
+        {
+            zoneId: privateZoneId,
+            vpcId: spokeVpc.vpcId,
+            comment: `Associate workload VPC with shared-services private hosted zone for ${currentRegion}`
+        }
+    ],
+    tags: {
+        Name: `workload-zone-association-${currentRegion}`,
+        Region: currentRegion,
+        IsPrimary: isPrimary.toString(),
+        Purpose: "dns-resolution"
+    }
+});
+
+pulumi.all([privateZoneName, spokeVpc.vpcId]).apply(([zoneName, vpcId]) => {
+    console.log(`${currentRegion}: Associating workload VPC ${vpcId} with private hosted zone ${zoneName}`);
+});
+
+// ============================================================================
+// TRANSIT GATEWAY ATTACHMENT
+// ============================================================================
 
 // Create Transit Gateway attachment for spoke VPC
 // Check if routing groups are enabled in shared services
@@ -147,16 +183,20 @@ const rdsGlobalCluster = new RDSGlobalComponent(`rds-global-${currentRegion}`, {
 // Create Route 53 hosted zone and health checks (only in primary region)
 let route53Resources: any = {};
 if (isPrimary) {
-    const route53Component = new Route53Component(`route53-${currentRegion}`, {
+    const route53HostedZoneComponent = new Route53HostedZoneComponent(`route53-${currentRegion}`, {
         hostedZones: [
             {
                 name: route53HostedZone,
                 private: false
             }
-        ],
+        ]
+    });
+
+    // Create DNS records for the hosted zone
+    const route53RecordsComponent = new Route53RecordsComponent(`route53-records-${currentRegion}`, {
         records: [
             {
-                zoneName: route53HostedZone,
+                zoneId: route53HostedZoneComponent.getHostedZoneId(route53HostedZone),
                 name: route53HostedZone,
                 type: "A",
                 values: ["1.2.3.4"], // Placeholder IP
@@ -164,11 +204,11 @@ if (isPrimary) {
             }
         ]
     });
-    
+
     route53Resources = {
-        hostedZoneIds: route53Component.hostedZoneIds,
-        nameServers: route53Component.nameServers,
-        recordFqdns: route53Component.recordFqdns
+        hostedZoneIds: route53HostedZoneComponent.hostedZoneIds,
+        nameServers: route53HostedZoneComponent.nameServers,
+        recordFqdns: route53RecordsComponent.recordFqdns
     };
 }
 
@@ -187,4 +227,9 @@ export const transitGatewayAttachmentId = spokeVpcAttachment.id;
 export const region = currentRegion;
 export const isPrimaryRegion = isPrimary;
 export const workloadRoute53Resources = route53Resources;
+
+// Export private hosted zone association details
+export const privateZoneAssociationIds = privateZoneAssociation.associationIds;
+export const associatedPrivateZoneId = privateZoneId;
+export const associatedPrivateZoneName = privateZoneName;
 
