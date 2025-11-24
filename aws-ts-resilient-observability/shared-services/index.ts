@@ -228,21 +228,30 @@ let tgwPeering: {
 } | undefined;
 
 if (!isPrimary) {
-    // Create Transit Gateway peering to primary region using the component method
+    // Create Transit Gateway peering to primary region with automatic route propagation
+    // This enables cross-region connectivity between routing groups
     const primaryTgwId = primaryStack!.getOutput("transitGatewayId");
     console.log(`Secondary region: Creating Transit Gateway peering to ${primaryRegion!}`);
-    
+
     tgwPeering = transitGateway.createPeering(`tgw-${currentRegion}`, {
         peerTransitGatewayId: primaryTgwId,
         peerRegion: primaryRegion!,
         currentRegion: currentRegion,
+        // Route propagation is enabled by default for all routing groups
+        // This allows VPCs in matching routing groups to communicate across regions
+        // For example: production VPCs in us-east-1 can reach production VPCs in us-west-2
+        enableRoutePropagation: true,
+        // Optional: Specify which routing groups should have cross-region connectivity
+        // If not specified, all routing groups will be connected
+        // propagateToGroups: ['hub', 'production'], // Uncomment to limit cross-region routing
         tags: {
             Environment: "production",
-            ManagedBy: "Pulumi"
+            ManagedBy: "Pulumi",
+            CrossRegionRouting: "enabled"
         }
     });
-    
-    console.log(`Secondary region: Transit Gateway peering established with ${primaryRegion!}`);
+
+    console.log(`Secondary region: Transit Gateway peering established with ${primaryRegion!} (cross-region routing enabled)`);
 }
 
 // ============================================================================

@@ -46,6 +46,18 @@ export interface TransitGatewayPeeringArgs {
     currentRegion: string;
     /** Tags for the peering attachment */
     tags?: pulumi.Input<{ [key: string]: pulumi.Input<string> }>;
+    /**
+     * Enable cross-region route propagation for peering attachment
+     * When true, routes from the peer region will be propagated to local route tables
+     * Default: true
+     */
+    enableRoutePropagation?: boolean;
+    /**
+     * Specify which routing groups should have cross-region connectivity
+     * If not specified, all routing groups will be connected
+     * Example: ['hub', 'production'] - only hub and production will have cross-region routes
+     */
+    propagateToGroups?: string[];
 }
 
 export interface VpcAttachmentArgs {
@@ -330,6 +342,46 @@ export class TransitGateway extends pulumi.ComponentResource {
     }
 
     /**
+     * Configure cross-region route propagation for a peering attachment
+     * Propagates routes from the peer region to specified routing groups in this region
+     * @param peeringAttachment The peering attachment to propagate routes for
+     * @param propagateToGroups Optional list of routing groups to propagate to (default: all groups)
+     */
+    private configureCrossRegionRoutePropagation(
+        peeringAttachment: aws.ec2transitgateway.PeeringAttachment,
+        peeringAccepter: aws.ec2transitgateway.PeeringAttachmentAccepter,
+        peeringName: string,
+        propagateToGroups?: string[]
+    ): void {
+        // Determine which routing groups should receive cross-region routes
+        const targetGroups = propagateToGroups || Array.from(this.routeTables.keys());
+
+        // Validate that all specified groups exist
+        targetGroups.forEach(groupName => {
+            if (!this.routeTables.has(groupName)) {
+                throw new Error(`Cannot propagate to routing group '${groupName}': group does not exist`);
+            }
+        });
+
+        // Propagate peering attachment routes to each target routing group's route table
+        targetGroups.forEach(groupName => {
+            const routeTable = this.routeTables.get(groupName)!;
+
+            new aws.ec2transitgateway.RouteTablePropagation(
+                `${peeringName}-to-${groupName}-cross-region-prop`,
+                {
+                    transitGatewayAttachmentId: peeringAttachment.id,
+                    transitGatewayRouteTableId: routeTable.id
+                },
+                {
+                    parent: this,
+                    dependsOn: [peeringAccepter] // Ensure peering is accepted before propagating routes
+                }
+            );
+        });
+    }
+
+    /**
      * Get route table ID for a routing group
      */
     public getRouteTableId(groupName: string): pulumi.Output<string> {
@@ -356,6 +408,7 @@ export class TransitGateway extends pulumi.ComponentResource {
 
     /**
      * Create a peering connection to another Transit Gateway in a different region
+     * Automatically configures route propagation for cross-region connectivity
      * @param name Name for the peering resources
      * @param args Peering configuration
      * @returns Object containing the peering attachment and accepter
@@ -364,6 +417,9 @@ export class TransitGateway extends pulumi.ComponentResource {
         peeringAttachment: aws.ec2transitgateway.PeeringAttachment;
         peeringAccepter: aws.ec2transitgateway.PeeringAttachmentAccepter;
     } {
+        // Default to enabling route propagation if not specified
+        const enablePropagation = args.enableRoutePropagation ?? true;
+
         // Create peering attachment from this TGW to peer TGW
         const peeringAttachment = new aws.ec2transitgateway.PeeringAttachment(
             `${name}-peering`,
@@ -376,6 +432,7 @@ export class TransitGateway extends pulumi.ComponentResource {
                     Side: "requester",
                     PeerRegion: args.peerRegion,
                     CurrentRegion: args.currentRegion,
+                    RoutePropagation: enablePropagation ? "enabled" : "disabled",
                     ...args.tags as any
                 }
             },
@@ -402,6 +459,7 @@ export class TransitGateway extends pulumi.ComponentResource {
                     Side: "accepter",
                     PeerRegion: args.currentRegion,
                     CurrentRegion: args.peerRegion,
+                    RoutePropagation: enablePropagation ? "enabled" : "disabled",
                     ...args.tags as any
                 }
             },
@@ -416,6 +474,16 @@ export class TransitGateway extends pulumi.ComponentResource {
                 }
             }
         );
+
+        // Configure cross-region route propagation if enabled
+        if (enablePropagation && this.routeTables.size > 0) {
+            this.configureCrossRegionRoutePropagation(
+                peeringAttachment,
+                peeringAccepter,
+                name,
+                args.propagateToGroups
+            );
+        }
 
         return { peeringAttachment, peeringAccepter };
     }
