@@ -312,10 +312,14 @@ export class DeploymentOrchestrator {
             // Explicitly add ESC environment reference for shared-services stacks
             // This ensures the automation API loads secrets from ESC
             if (stackConfig.name.includes('shared-services')) {
-                const workspace = stack.workspace;
                 try {
-                    await workspace.addEnvironments(stackConfig.stackName || stackConfig.name, 'namecheap-credentials');
-                    console.log(`✅ ESC environment 'namecheap-credentials' loaded for ${stackConfig.name}`);
+                    // Check if environment is already added to avoid duplicates
+                    const existingEnvironments = await stack.listEnvironments();
+                    if (!existingEnvironments.includes('namecheap-credentials')) {
+                        const workspace = stack.workspace;
+                        await workspace.addEnvironments(stackConfig.stackName || stackConfig.name, 'namecheap-credentials');
+                        console.log(`✅ ESC environment 'namecheap-credentials' loaded for ${stackConfig.name}`);
+                    }
                 } catch (error) {
                     // Environment might already be added from Pulumi.yaml, that's okay
                     console.log(`Note: ESC environment configuration from Pulumi.yaml`);
