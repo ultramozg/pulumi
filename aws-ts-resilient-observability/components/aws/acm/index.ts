@@ -131,17 +131,24 @@ export class AcmCertificateComponent extends BaseAWSComponent implements AcmCert
         });
 
         // Create ACM certificate
+        // Note: ACM has strict tag value requirements - only letters, spaces, numbers, and _.:\/=+\-@
+        // We sanitize tags to ensure they meet ACM requirements
+        const acmSafeTags = this.sanitizeTagsForAcm({
+            Name: `${name}-certificate`,
+            Domain: args.domainName,
+            ManagedBy: "Pulumi",
+            Stack: pulumi.getStack(),
+            Project: pulumi.getProject(),
+            ...args.tags
+        });
+
         this.certificate = new aws.acm.Certificate(
             `${name}-cert`,
             {
                 domainName: args.domainName,
                 subjectAlternativeNames: args.subjectAlternativeNames,
                 validationMethod: "DNS",
-                tags: this.mergeTags({
-                    Name: `${name}-certificate`,
-                    Domain: args.domainName,
-                    ValidationMethod: validationMethod
-                })
+                tags: acmSafeTags
             },
             {
                 parent: this,
@@ -287,5 +294,32 @@ export class AcmCertificateComponent extends BaseAWSComponent implements AcmCert
                 value: validation.resourceRecordValue
             }));
         });
+    }
+
+    /**
+     * Sanitize tags to meet ACM requirements
+     * ACM tag values must match: [\p{L}\p{Z}\p{N}_.:\/=+\-@]*
+     * This allows: letters, spaces, numbers, and the characters _.:\/=+\-@
+     */
+    private sanitizeTagsForAcm(tags: { [key: string]: string }): { [key: string]: string } {
+        const sanitized: { [key: string]: string } = {};
+
+        // ACM regex pattern allows: letters, spaces, numbers, and _.:\/=+\-@
+        const acmPattern = /^[\p{L}\p{Z}\p{N}_.:\/=+\-@]*$/u;
+
+        Object.entries(tags).forEach(([key, value]) => {
+            if (acmPattern.test(value)) {
+                sanitized[key] = value;
+            } else {
+                // Log warning about skipped tag
+                this.logger.warn("Skipping tag with invalid characters for ACM", {
+                    key,
+                    value,
+                    reason: "Does not match ACM tag value pattern"
+                });
+            }
+        });
+
+        return sanitized;
     }
 }

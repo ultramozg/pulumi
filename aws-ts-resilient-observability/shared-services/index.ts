@@ -55,12 +55,12 @@ if (isPrimary) {
     const ipamOperatingRegions = config.getObject<string[]>("ipamOperatingRegions") ?? ["us-east-1", "us-west-2"];
     const ipamRegionalPoolNetmask = config.getNumber("ipamRegionalPoolNetmask") ?? 12;
     const ipamVpcAllocationNetmask = config.getNumber("ipamVpcAllocationNetmask") ?? 16;
-    
+
     // Create IPAM only in primary region
     ipam = new IPAMComponent(`ipam-primary`, {
         region: currentRegion,
         cidrBlocks: ipamCidrBlocks,
-        shareWithOrganization: false, // Set to true if using AWS Organizations
+        shareWithOrganization: false,
         operatingRegions: ipamOperatingRegions,
         regionalPoolNetmask: ipamRegionalPoolNetmask,
         vpcAllocationNetmask: ipamVpcAllocationNetmask,
@@ -75,12 +75,12 @@ if (isPrimary) {
     const poolResources = ipam.getPoolResources(currentRegion);
     ipamPoolId = poolResources.pool.id;
     ipamPoolDependencies = [poolResources.pool, ...poolResources.cidrs];
-    
+
     console.log(`Primary region ${currentRegion}: IPAM created for centralized IP management`);
 } else {
     // Secondary region: Import IPAM pool ID from primary region stack
     const primaryIpamPoolIds = primaryStack!.getOutput("ipamPoolIds");
-    
+
     // Extract the pool ID for the current (secondary) region
     ipamPoolId = pulumi.output(primaryIpamPoolIds).apply((pools: any) => {
         if (!pools || !pools[currentRegion]) {
@@ -88,7 +88,7 @@ if (isPrimary) {
         }
         return pools[currentRegion] as string;
     });
-    
+
     console.log(`Secondary region ${currentRegion}: Using IPAM pool from primary region`);
 }
 
@@ -117,7 +117,7 @@ const transitGateway = new TransitGateway(`transit-gateway-${currentRegion}`, {
 // Both primary and secondary regions use IPAM for automatic CIDR allocation
 const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
     region: currentRegion,
-    ipamPoolId: ipamPoolId, // Use IPAM pool from primary region (works for both regions)
+    ipamPoolId: ipamPoolId,
     internetGatewayEnabled: true,
     natGatewayEnabled: true,
     availabilityZoneCount: 3,
@@ -125,12 +125,12 @@ const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
         public: {
             type: "public",
             subnetPrefix: 24,
-            availabilityZones: 3  // Create 3 subnets (one per AZ)
+            availabilityZones: 3
         },
         private: {
-            type: "private", 
+            type: "private",
             subnetPrefix: 24,
-            availabilityZones: 3  // Create 3 subnets (one per AZ)
+            availabilityZones: 3
         }
     },
     tags: {
@@ -199,7 +199,7 @@ if (isPrimary) {
     // Share Transit Gateway with workloads account via RAM (cross-account only)
     if (isCrossAccount && enableRamSharing) {
         console.log(`Primary region: Enabling RAM sharing - Shared Services (${sharedServicesAccountId}) -> Workloads (${workloadsAccountId})`);
-        
+
         const ramShareComponent = new RAMShareComponent(`tgw-ram-${currentRegion}`, {
             name: `transit-gateway-share-${currentRegion}`,
             transitGatewayArn: transitGateway.transitGateway.arn,
@@ -222,7 +222,7 @@ if (isPrimary) {
 // ============================================================================
 // SECONDARY REGION - TRANSIT GATEWAY PEERING
 // ============================================================================
-let tgwPeering: { 
+let tgwPeering: {
     peeringAttachment: aws.ec2transitgateway.PeeringAttachment;
     peeringAccepter: aws.ec2transitgateway.PeeringAttachmentAccepter;
 } | undefined;
@@ -320,7 +320,6 @@ if (enableCertificates) {
             Purpose: "internal-services",
             Region: currentRegion,
             IsPrimary: isPrimary.toString(),
-            ValidationMethod: certificateValidationMethod,
         },
     };
 
@@ -366,8 +365,6 @@ export const ipamId = ipam?.ipamId;
 export const ipamArn = ipam?.ipamArn;
 export const ipamPoolIds = ipam?.poolIds;
 export const ipamScopeId = ipam?.scopeId;
-
-// Export Transit Gateway peering resources (only available in secondary region)
 export const tgwPeeringAttachmentId = tgwPeering?.peeringAttachment.id;
 export const tgwPeeringState = tgwPeering?.peeringAttachment.state;
 
