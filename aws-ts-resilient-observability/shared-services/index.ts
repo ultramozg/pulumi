@@ -160,6 +160,11 @@ const hubVpcAttachment = transitGateway.attachVpc(`hub-vpc-attachment-${currentR
 
 console.log(`${currentRegion}: Hub VPC attached to Transit Gateway${enableRouteTableIsolation ? ' with routing group isolation' : ' (default route table)'}`);
 
+// Collect all VPC CIDR blocks in this region for cross-region TGW peering
+// This list is used to create static routes in peer regions
+// As you add more VPCs (workload VPCs, etc.), add their CIDR blocks here
+const allVpcCidrs = [hubVpc.cidrBlock];
+
 // Create EKS cluster for shared monitoring services
 const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
     region: currentRegion,
@@ -228,22 +233,35 @@ let tgwPeering: {
 } | undefined;
 
 if (!isPrimary) {
-    // Create Transit Gateway peering to primary region with automatic route propagation
-    // This enables cross-region connectivity between routing groups
+    // Create Transit Gateway peering to primary region with bidirectional static routes
+    // Note: AWS does not support route propagation for peering attachments
+    // This enables cross-region connectivity between routing groups using static routes
     const primaryTgwId = primaryStack!.getOutput("transitGatewayId");
+    const primaryVpcCidrs = primaryStack!.getOutput("allVpcCidrBlocks");
+    const primaryRouteTableIds = primaryStack!.getOutput("transitGatewayRouteTableIds");
+
     console.log(`Secondary region: Creating Transit Gateway peering to ${primaryRegion!}`);
 
     tgwPeering = transitGateway.createPeering(`tgw-${currentRegion}`, {
         peerTransitGatewayId: primaryTgwId,
         peerRegion: primaryRegion!,
         currentRegion: currentRegion,
-        // Route propagation is enabled by default for all routing groups
+        // Static routes are enabled by default for all routing groups
         // This allows VPCs in matching routing groups to communicate across regions
         // For example: production VPCs in us-east-1 can reach production VPCs in us-west-2
-        enableRoutePropagation: true,
+        enableCrossRegionRoutes: true,
+        // IPAM-allocated CIDR blocks from the peer (primary) region
+        // These are automatically collected from all VPCs using IPAM in the primary region
+        // Routes to these CIDRs will be added to this region's route tables
+        peerCidrs: primaryVpcCidrs as any,
+        // IPAM-allocated CIDR blocks from the local (secondary) region
+        // Routes to these CIDRs will be added to the peer region's route tables (bidirectional routing)
+        localCidrs: allVpcCidrs,
+        // Provide route table IDs in the peer region where routes to localCidrs should be added
+        peerRouteTableIds: primaryRouteTableIds as any,
         // Optional: Specify which routing groups should have cross-region connectivity
         // If not specified, all routing groups will be connected
-        // propagateToGroups: ['hub', 'production'], // Uncomment to limit cross-region routing
+        // routeToGroups: ['hub', 'production'], // Uncomment to limit cross-region routing
         tags: {
             Environment: "production",
             ManagedBy: "Pulumi",
@@ -251,7 +269,7 @@ if (!isPrimary) {
         }
     });
 
-    console.log(`Secondary region: Transit Gateway peering established with ${primaryRegion!} (cross-region routing enabled)`);
+    console.log(`Secondary region: Transit Gateway peering established with ${primaryRegion!} (bidirectional cross-region routing enabled)`);
 }
 
 // ============================================================================
@@ -347,11 +365,20 @@ export const transitGatewayId = transitGateway.transitGateway.id;
 export const transitGatewayArn = transitGateway.transitGateway.arn;
 export const transitGatewayIsolationEnabled = enableRouteTableIsolation;
 export const transitGatewayRoutingGroups = enableRouteTableIsolation ? transitGateway.getRoutingGroups() : [];
+// Export route table IDs for cross-region peering
+export const transitGatewayRouteTableIds = enableRouteTableIsolation
+    ? pulumi.all(transitGateway.getRoutingGroups().map(group => transitGateway.getRouteTableId(group)))
+    : pulumi.output([]);
 export const hubVpcId = hubVpc.vpcId;
 export const hubVpcCidrBlock = hubVpc.cidrBlock;
 export const hubPrivateSubnetIds = hubVpc.getSubnetIdsByType('private');
 export const hubPublicSubnetIds = hubVpc.getSubnetIdsByType('public');
 export const hubVpcAttachmentId = hubVpcAttachment.id;
+
+// Export all VPC CIDR blocks in this region for cross-region TGW peering
+// These are IPAM-allocated CIDRs used to create static routes in peer regions
+// As you add more VPCs (workload VPCs, etc.), add their CIDR blocks to allVpcCidrs array above
+export const allVpcCidrBlocks = pulumi.all(allVpcCidrs);
 export const eksClusterId = sharedEksCluster.clusterName;
 export const eksClusterEndpoint = sharedEksCluster.clusterEndpoint;
 export const eksClusterArn = sharedEksCluster.clusterArn;

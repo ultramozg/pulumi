@@ -47,17 +47,38 @@ export interface TransitGatewayPeeringArgs {
     /** Tags for the peering attachment */
     tags?: pulumi.Input<{ [key: string]: pulumi.Input<string> }>;
     /**
-     * Enable cross-region route propagation for peering attachment
-     * When true, routes from the peer region will be propagated to local route tables
+     * Enable cross-region static routes for peering attachment
+     * When true, static routes from the peer region will be added to local route tables
+     * Note: AWS does not support route propagation for peering attachments
      * Default: true
      */
-    enableRoutePropagation?: boolean;
+    enableCrossRegionRoutes?: boolean;
+    /**
+     * CIDR blocks from the peer region that should be routed through this peering
+     * Routes to these CIDRs will be added to the current region's route tables
+     * Required when enableCrossRegionRoutes is true
+     * Example: ['10.1.0.0/16', '10.2.0.0/16'] for peer region VPC CIDRs
+     */
+    peerCidrs?: pulumi.Input<string>[];
+    /**
+     * CIDR blocks from the current region that should be routable from the peer region
+     * Routes to these CIDRs will be added to the peer region's route tables
+     * Required for bidirectional routing
+     * Example: ['10.3.0.0/16', '10.4.0.0/16'] for current region VPC CIDRs
+     */
+    localCidrs?: pulumi.Input<string>[];
+    /**
+     * Route table IDs in the peer region where routes to localCidrs should be added
+     * Required when localCidrs is provided for bidirectional routing
+     * Example: ['tgw-rtb-xxx', 'tgw-rtb-yyy']
+     */
+    peerRouteTableIds?: pulumi.Input<string>[];
     /**
      * Specify which routing groups should have cross-region connectivity
      * If not specified, all routing groups will be connected
      * Example: ['hub', 'production'] - only hub and production will have cross-region routes
      */
-    propagateToGroups?: string[];
+    routeToGroups?: string[];
 }
 
 export interface VpcAttachmentArgs {
@@ -342,15 +363,20 @@ export class TransitGateway extends pulumi.ComponentResource {
     }
 
     /**
-     * Configure cross-region route propagation for a peering attachment
-     * Propagates routes from the peer region to specified routing groups in this region
-     * @param peeringAttachment The peering attachment to propagate routes for
-     * @param propagateToGroups Optional list of routing groups to propagate to (default: all groups)
+     * Configure cross-region static routes for a peering attachment
+     * AWS does not support route propagation for peering attachments, so we must use static routes
+     * Note: You need to provide the CIDR blocks from the peer region when calling createPeering
+     * @param peeringAttachment The peering attachment to create routes for
+     * @param peeringAccepter The peering accepter resource
+     * @param peeringName Name prefix for route resources
+     * @param peerCidrs CIDR blocks from the peer region to route through the peering
+     * @param propagateToGroups Optional list of routing groups to add routes to (default: all groups)
      */
-    private configureCrossRegionRoutePropagation(
+    private configureCrossRegionStaticRoutes(
         peeringAttachment: aws.ec2transitgateway.PeeringAttachment,
         peeringAccepter: aws.ec2transitgateway.PeeringAttachmentAccepter,
         peeringName: string,
+        peerCidrs: pulumi.Input<string>[],
         propagateToGroups?: string[]
     ): void {
         // Determine which routing groups should receive cross-region routes
@@ -359,25 +385,28 @@ export class TransitGateway extends pulumi.ComponentResource {
         // Validate that all specified groups exist
         targetGroups.forEach(groupName => {
             if (!this.routeTables.has(groupName)) {
-                throw new Error(`Cannot propagate to routing group '${groupName}': group does not exist`);
+                throw new Error(`Cannot add routes to routing group '${groupName}': group does not exist`);
             }
         });
 
-        // Propagate peering attachment routes to each target routing group's route table
+        // Create static routes to peer region CIDRs for each target routing group
         targetGroups.forEach(groupName => {
             const routeTable = this.routeTables.get(groupName)!;
 
-            new aws.ec2transitgateway.RouteTablePropagation(
-                `${peeringName}-to-${groupName}-cross-region-prop`,
-                {
-                    transitGatewayAttachmentId: peeringAttachment.id,
-                    transitGatewayRouteTableId: routeTable.id
-                },
-                {
-                    parent: this,
-                    dependsOn: [peeringAccepter] // Ensure peering is accepted before propagating routes
-                }
-            );
+            peerCidrs.forEach((cidr, index) => {
+                new aws.ec2transitgateway.Route(
+                    `${peeringName}-to-${groupName}-route-${index}`,
+                    {
+                        destinationCidrBlock: cidr,
+                        transitGatewayAttachmentId: peeringAttachment.id,
+                        transitGatewayRouteTableId: routeTable.id
+                    },
+                    {
+                        parent: this,
+                        dependsOn: [peeringAccepter] // Ensure peering is accepted before creating routes
+                    }
+                );
+            });
         });
     }
 
@@ -408,7 +437,8 @@ export class TransitGateway extends pulumi.ComponentResource {
 
     /**
      * Create a peering connection to another Transit Gateway in a different region
-     * Automatically configures route propagation for cross-region connectivity
+     * Automatically configures static routes for cross-region connectivity
+     * Note: AWS does not support route propagation for peering attachments
      * @param name Name for the peering resources
      * @param args Peering configuration
      * @returns Object containing the peering attachment and accepter
@@ -417,8 +447,17 @@ export class TransitGateway extends pulumi.ComponentResource {
         peeringAttachment: aws.ec2transitgateway.PeeringAttachment;
         peeringAccepter: aws.ec2transitgateway.PeeringAttachmentAccepter;
     } {
-        // Default to enabling route propagation if not specified
-        const enablePropagation = args.enableRoutePropagation ?? true;
+        // Default to enabling cross-region routes if not specified
+        const enableRoutes = args.enableCrossRegionRoutes ?? true;
+
+        // Validate that peerCidrs is provided if routes are enabled
+        if (enableRoutes && (!args.peerCidrs || args.peerCidrs.length === 0)) {
+            pulumi.log.warn(
+                `Cross-region routes are enabled for peering ${name}, but no peerCidrs were provided. ` +
+                `Routes will not be created. Provide peerCidrs to enable automatic route creation.`,
+                this
+            );
+        }
 
         // Create peering attachment from this TGW to peer TGW
         const peeringAttachment = new aws.ec2transitgateway.PeeringAttachment(
@@ -432,7 +471,7 @@ export class TransitGateway extends pulumi.ComponentResource {
                     Side: "requester",
                     PeerRegion: args.peerRegion,
                     CurrentRegion: args.currentRegion,
-                    RoutePropagation: enablePropagation ? "enabled" : "disabled",
+                    CrossRegionRoutes: enableRoutes ? "enabled" : "disabled",
                     ...args.tags as any
                 }
             },
@@ -459,7 +498,7 @@ export class TransitGateway extends pulumi.ComponentResource {
                     Side: "accepter",
                     PeerRegion: args.currentRegion,
                     CurrentRegion: args.peerRegion,
-                    RoutePropagation: enablePropagation ? "enabled" : "disabled",
+                    CrossRegionRoutes: enableRoutes ? "enabled" : "disabled",
                     ...args.tags as any
                 }
             },
@@ -475,14 +514,50 @@ export class TransitGateway extends pulumi.ComponentResource {
             }
         );
 
-        // Configure cross-region route propagation if enabled
-        if (enablePropagation && this.routeTables.size > 0) {
-            this.configureCrossRegionRoutePropagation(
+        // Configure cross-region static routes if enabled and CIDRs are provided
+        if (enableRoutes && args.peerCidrs && args.peerCidrs.length > 0 && this.routeTables.size > 0) {
+            // Add routes in the current region to reach the peer region
+            this.configureCrossRegionStaticRoutes(
                 peeringAttachment,
                 peeringAccepter,
                 name,
-                args.propagateToGroups
+                args.peerCidrs,
+                args.routeToGroups
             );
+        }
+
+        // Configure bidirectional routes - add routes in the peer region to reach the current region
+        if (enableRoutes && args.localCidrs && args.localCidrs.length > 0 &&
+            args.peerRouteTableIds && args.peerRouteTableIds.length > 0) {
+
+            // Get provider for peer region
+            const peerProvider = getProvider(args.peerRegion, this);
+
+            // Create routes in the peer region's route tables
+            const peerRouteTableIdsArray = Array.isArray(args.peerRouteTableIds)
+                ? args.peerRouteTableIds
+                : [args.peerRouteTableIds];
+            const localCidrsArray = Array.isArray(args.localCidrs)
+                ? args.localCidrs
+                : [args.localCidrs];
+
+            peerRouteTableIdsArray.forEach((routeTableId, rtIndex) => {
+                localCidrsArray.forEach((cidr, cidrIndex) => {
+                    new aws.ec2transitgateway.Route(
+                        `${name}-peer-to-local-rt${rtIndex}-route-${cidrIndex}`,
+                        {
+                            destinationCidrBlock: cidr,
+                            transitGatewayAttachmentId: peeringAttachment.id,
+                            transitGatewayRouteTableId: routeTableId
+                        },
+                        {
+                            parent: this,
+                            provider: peerProvider,
+                            dependsOn: [peeringAccepter] // Ensure peering is accepted before creating routes
+                        }
+                    );
+                });
+            });
         }
 
         return { peeringAttachment, peeringAccepter };
