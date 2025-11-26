@@ -11,3 +11,6 @@ export * from './aws';
 
 // Namecheap components
 export * from './namecheap';
+
+// Observability components (cloud-agnostic, Kubernetes-based)
+export * from './observability';
