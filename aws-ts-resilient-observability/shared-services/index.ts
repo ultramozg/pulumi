@@ -165,29 +165,18 @@ console.log(`${currentRegion}: Hub VPC attached to Transit Gateway${enableRouteT
 // As you add more VPCs (workload VPCs, etc.), add their CIDR blocks here
 const allVpcCidrs = [hubVpc.cidrBlock];
 
-// Create EKS cluster for shared monitoring services
+// Create EKS cluster for shared monitoring services with Auto Mode
 const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
     region: currentRegion,
     clusterName: eksClusterName,
     version: "1.34",
     vpcId: hubVpc.vpcId,
     subnetIds: hubVpc.getSubnetIdsByType('private'),
-    autoModeEnabled: false,
+    autoMode: {
+        enabled: true,
+        nodePools: ["general-purpose", "system"]
+    },
     addons: ["vpc-cni", "coredns", "kube-proxy"],
-    nodeGroups: [
-        {
-            name: "monitoring-nodes",
-            instanceTypes: ["m5.large", "m5.xlarge"],
-            scalingConfig: {
-                minSize: 2,
-                maxSize: 10,
-                desiredSize: 3
-            },
-            tags: {
-                "node-type": "monitoring"
-            }
-        }
-    ],
     tags: {
         Name: eksClusterName,
         Region: currentRegion,

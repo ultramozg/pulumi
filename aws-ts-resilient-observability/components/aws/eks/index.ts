@@ -4,7 +4,7 @@ import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion }
 import { ComputeOutputs } from "../../shared/interfaces";
 
 /**
- * EKS Node Group configuration
+ * EKS Node Group configuration (for traditional managed node groups)
  */
 export interface EKSNodeGroupConfig {
     name: string;
@@ -22,45 +22,12 @@ export interface EKSNodeGroupConfig {
 }
 
 /**
- * EC2NodeClass configuration for EKS auto mode
+ * EKS Auto Mode configuration
  */
-export interface EC2NodeClassConfig {
-    name: string;
-    instanceStorePolicy?: "RAID0" | "NVME";
-    userData?: string;
-    amiFamily?: "AL2" | "AL2023" | "BOTTLEROCKET" | "UBUNTU" | "WINDOWS_CORE" | "WINDOWS_FULL";
-    subnetSelectorTerms?: {
-        tags?: { [key: string]: string };
-    }[];
-    securityGroupSelectorTerms?: {
-        tags?: { [key: string]: string };
-    }[];
-    role?: string;
-    tags?: { [key: string]: string };
-}
-
-/**
- * NodePool configuration for EKS auto mode
- */
-export interface NodePoolConfig {
-    name: string;
-    nodeClassRef: string;
-    requirements?: {
-        key: string;
-        operator: "In" | "NotIn" | "Exists" | "DoesNotExist" | "Gt" | "Lt";
-        values?: string[];
-    }[];
-    limits?: {
-        cpu?: string;
-        memory?: string;
-    };
-    disruption?: {
-        consolidationPolicy?: "WhenEmpty" | "WhenUnderutilized";
-        consolidateAfter?: string;
-        expireAfter?: string;
-    };
-    weight?: number;
-    tags?: { [key: string]: string };
+export interface EKSAutoModeConfig {
+    enabled: boolean;
+    nodePools?: string[];  // e.g., ["general-purpose", "system"]
+    nodeRoleArn?: pulumi.Input<string>;  // Optional custom node role
 }
 
 /**
@@ -69,7 +36,7 @@ export interface NodePoolConfig {
 export interface EKSComponentArgs extends BaseComponentArgs {
     clusterName: string;
     version?: string;
-    autoModeEnabled?: boolean;
+    autoMode?: EKSAutoModeConfig;
     addons?: string[];
     vpcId?: pulumi.Input<string>;
     subnetIds?: pulumi.Input<string[]>;
@@ -79,8 +46,6 @@ export interface EKSComponentArgs extends BaseComponentArgs {
         publicAccessCidrs?: string[];
     };
     nodeGroups?: EKSNodeGroupConfig[];
-    ec2NodeClasses?: EC2NodeClassConfig[];
-    nodePools?: NodePoolConfig[];
     enableCloudWatchLogging?: boolean;
     logTypes?: string[];
     encryptionConfig?: {
@@ -106,7 +71,10 @@ export interface EKSComponentOutputs extends ComputeOutputs {
 }
 
 /**
- * EKS Component with auto mode support and configurable addons
+ * EKS Component with AWS Auto Mode support and configurable addons
+ *
+ * Auto Mode enables AWS-managed node provisioning without requiring Karpenter installation.
+ * When Auto Mode is enabled, AWS automatically provisions and manages compute resources.
  */
 export class EKSComponent extends BaseAWSComponent implements EKSComponentOutputs {
     public readonly clusterName: pulumi.Output<string>;
@@ -151,13 +119,8 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         // Create EKS cluster
         this.cluster = this.createCluster(args);
 
-        // Set up auto mode if enabled
-        if (args.autoModeEnabled) {
-            this.setupAutoMode(args);
-        }
-
-        // Create node groups if specified
-        if (args.nodeGroups && args.nodeGroups.length > 0) {
+        // Create node groups if specified (only if auto mode is not enabled)
+        if (args.nodeGroups && args.nodeGroups.length > 0 && !args.autoMode?.enabled) {
             this.createNodeGroups(args);
         }
 
@@ -303,12 +266,20 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
             ];
         }
 
-        // Enable auto mode if specified
-        if (args.autoModeEnabled) {
-            // Note: EKS auto mode configuration is typically handled through
-            // the EKS console or CLI, not directly through Pulumi
-            // This is a placeholder for future auto mode support
-            pulumi.log.info("EKS auto mode enabled - additional configuration may be required");
+        // Enable EKS Auto Mode if specified
+        if (args.autoMode?.enabled) {
+            clusterConfig.computeConfig = {
+                enabled: true,
+                nodePools: args.autoMode.nodePools || ["general-purpose"],
+                nodeRoleArn: args.autoMode.nodeRoleArn
+            };
+
+            // Auto Mode requires API authentication mode
+            clusterConfig.accessConfig = {
+                authenticationMode: "API"
+            };
+
+            pulumi.log.info(`EKS Auto Mode enabled with node pools: ${args.autoMode.nodePools?.join(", ") || "general-purpose"}`);
         }
 
         return new aws.eks.Cluster(
@@ -322,91 +293,6 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         );
     }
 
-    /**
-     * Set up EKS auto mode with EC2NodeClass and NodePool configurations
-     */
-    private setupAutoMode(args: EKSComponentArgs): void {
-        if (!args.autoModeEnabled) return;
-
-        // Create EC2NodeClass resources if specified
-        if (args.ec2NodeClasses) {
-            args.ec2NodeClasses.forEach(nodeClassConfig => {
-                this.createEC2NodeClass(nodeClassConfig);
-            });
-        }
-
-        // Create NodePool resources if specified
-        if (args.nodePools) {
-            args.nodePools.forEach(nodePoolConfig => {
-                this.createNodePool(nodePoolConfig);
-            });
-        }
-    }
-
-    /**
-     * Create EC2NodeClass for EKS auto mode
-     */
-    private createEC2NodeClass(config: EC2NodeClassConfig): void {
-        // Note: EC2NodeClass is typically managed through Karpenter
-        // This is a placeholder for the Kubernetes resource that would be applied
-        // In a real implementation, this would use the Kubernetes provider
-
-        const nodeClassSpec = {
-            apiVersion: "karpenter.k8s.aws/v1beta1",
-            kind: "EC2NodeClass",
-            metadata: {
-                name: config.name,
-                labels: config.tags
-            },
-            spec: {
-                amiFamily: config.amiFamily || "AL2",
-                instanceStorePolicy: config.instanceStorePolicy,
-                userData: config.userData,
-                subnetSelectorTerms: config.subnetSelectorTerms,
-                securityGroupSelectorTerms: config.securityGroupSelectorTerms,
-                role: config.role
-            }
-        };
-
-        // Store the configuration for later application via kubectl or Kubernetes provider
-        // This would typically be applied after cluster creation
-        pulumi.log.info(`EC2NodeClass configuration prepared: ${JSON.stringify(nodeClassSpec)}`);
-    }
-
-    /**
-     * Create NodePool for EKS auto mode
-     */
-    private createNodePool(config: NodePoolConfig): void {
-        // Note: NodePool is typically managed through Karpenter
-        // This is a placeholder for the Kubernetes resource that would be applied
-
-        const nodePoolSpec = {
-            apiVersion: "karpenter.sh/v1beta1",
-            kind: "NodePool",
-            metadata: {
-                name: config.name,
-                labels: config.tags
-            },
-            spec: {
-                template: {
-                    spec: {
-                        nodeClassRef: {
-                            apiVersion: "karpenter.k8s.aws/v1beta1",
-                            kind: "EC2NodeClass",
-                            name: config.nodeClassRef
-                        },
-                        requirements: config.requirements
-                    }
-                },
-                limits: config.limits,
-                disruption: config.disruption,
-                weight: config.weight
-            }
-        };
-
-        // Store the configuration for later application via kubectl or Kubernetes provider
-        pulumi.log.info(`NodePool configuration prepared: ${JSON.stringify(nodePoolSpec)}`);
-    }
 
     /**
      * Create managed node groups

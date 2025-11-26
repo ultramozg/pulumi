@@ -130,29 +130,18 @@ spokeVpcAttachment = new aws.ec2transitgateway.VpcAttachment(`spoke-vpc-attachme
     }
 });
 
-// Create EKS cluster for workloads
+// Create EKS cluster for workloads with Auto Mode
 const workloadEksCluster = new EKSComponent(`workload-eks-${currentRegion}`, {
     region: currentRegion,
     clusterName: eksClusterName,
-    version: "1.33",
+    version: "1.34",
     vpcId: spokeVpc.vpcId,
     subnetIds: spokeVpc.getSubnetIdsByType("private"),
-    autoModeEnabled: false,
+    autoMode: {
+        enabled: true,
+        nodePools: ["general-purpose", "system"]
+    },
     addons: ["vpc-cni", "coredns", "kube-proxy", "aws-load-balancer-controller"],
-    nodeGroups: [
-        {
-            name: "workload-nodes",
-            instanceTypes: ["m5.large", "m5.xlarge"],
-            scalingConfig: {
-                minSize: 2,
-                maxSize: 20,
-                desiredSize: 4
-            },
-            tags: {
-                "node-type": "workload"
-            }
-        }
-    ],
     tags: {
         Name: eksClusterName,
         Region: currentRegion,

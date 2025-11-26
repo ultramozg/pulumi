@@ -48,14 +48,17 @@ export function createBasicEKSCluster(): EKSComponent {
 }
 
 /**
- * Example: EKS cluster with auto mode and Karpenter configuration
+ * Example: EKS cluster with Auto Mode (AWS-managed node provisioning)
  */
 export function createAutoModeEKSCluster(): EKSComponent {
     const args: EKSComponentArgs = {
         clusterName: "auto-mode-cluster",
-        version: "1.31",
+        version: "1.34",
         region: "us-west-2",
-        autoModeEnabled: true,
+        autoMode: {
+            enabled: true,
+            nodePools: ["general-purpose", "system"]
+        },
         subnetIds: [
             "subnet-11111111",
             "subnet-22222222",
@@ -66,87 +69,6 @@ export function createAutoModeEKSCluster(): EKSComponent {
             publicAccess: false // Private cluster
         },
         enableCloudWatchLogging: true,
-        ec2NodeClasses: [{
-            name: "default-nodeclass",
-            amiFamily: "AL2023",
-            instanceStorePolicy: "RAID0",
-            subnetSelectorTerms: [{
-                tags: { "karpenter.sh/discovery": "auto-mode-cluster" }
-            }],
-            securityGroupSelectorTerms: [{
-                tags: { "karpenter.sh/discovery": "auto-mode-cluster" }
-            }],
-            tags: {
-                NodeClass: "default",
-                Environment: "production"
-            }
-        }, {
-            name: "gpu-nodeclass",
-            amiFamily: "AL2",
-            instanceStorePolicy: "NVME",
-            subnetSelectorTerms: [{
-                tags: { "karpenter.sh/discovery": "auto-mode-cluster" }
-            }],
-            securityGroupSelectorTerms: [{
-                tags: { "karpenter.sh/discovery": "auto-mode-cluster" }
-            }],
-            tags: {
-                NodeClass: "gpu",
-                Environment: "production"
-            }
-        }],
-        nodePools: [{
-            name: "general-pool",
-            nodeClassRef: "default-nodeclass",
-            requirements: [{
-                key: "kubernetes.io/arch",
-                operator: "In",
-                values: ["amd64"]
-            }, {
-                key: "karpenter.sh/capacity-type",
-                operator: "In",
-                values: ["on-demand", "spot"]
-            }, {
-                key: "node.kubernetes.io/instance-type",
-                operator: "In",
-                values: ["t3.medium", "t3.large", "t3.xlarge"]
-            }],
-            limits: {
-                cpu: "1000",
-                memory: "1000Gi"
-            },
-            disruption: {
-                consolidationPolicy: "WhenUnderutilized",
-                consolidateAfter: "30s",
-                expireAfter: "2160h" // 90 days
-            },
-            weight: 10
-        }, {
-            name: "gpu-pool",
-            nodeClassRef: "gpu-nodeclass",
-            requirements: [{
-                key: "kubernetes.io/arch",
-                operator: "In",
-                values: ["amd64"]
-            }, {
-                key: "karpenter.sh/capacity-type",
-                operator: "In",
-                values: ["on-demand"]
-            }, {
-                key: "node.kubernetes.io/instance-type",
-                operator: "In",
-                values: ["g4dn.xlarge", "g4dn.2xlarge"]
-            }],
-            limits: {
-                cpu: "100",
-                memory: "100Gi"
-            },
-            disruption: {
-                consolidationPolicy: "WhenEmpty",
-                expireAfter: "720h" // 30 days
-            },
-            weight: 5
-        }],
         addons: [
             "vpc-cni",
             "coredns",
@@ -156,7 +78,7 @@ export function createAutoModeEKSCluster(): EKSComponent {
         ],
         tags: {
             Environment: "production",
-            Team: "ml-platform",
+            Team: "platform",
             Project: "auto-scaling"
         }
     };
