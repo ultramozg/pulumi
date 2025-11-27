@@ -274,6 +274,19 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
                 nodeRoleArn: args.autoMode.nodeRoleArn
             };
 
+            // Auto Mode requires all three configs to be explicitly set
+            clusterConfig.kubernetesNetworkConfig = {
+                elasticLoadBalancing: {
+                    enabled: true
+                }
+            };
+
+            clusterConfig.storageConfig = {
+                blockStorage: {
+                    enabled: true
+                }
+            };
+
             // Auto Mode requires API authentication mode
             clusterConfig.accessConfig = {
                 authenticationMode: "API"
