@@ -50,11 +50,11 @@ if (!isPrimary) {
 }
 
 if (isPrimary) {
-    // Get IPAM configuration from config
-    const ipamCidrBlocks = config.getObject<string[]>("ipamCidrBlocks") ?? ["10.0.0.0/8"];
-    const ipamOperatingRegions = config.getObject<string[]>("ipamOperatingRegions") ?? ["us-east-1", "us-west-2"];
-    const ipamRegionalPoolNetmask = config.getNumber("ipamRegionalPoolNetmask") ?? 12;
-    const ipamVpcAllocationNetmask = config.getNumber("ipamVpcAllocationNetmask") ?? 16;
+    // Get IPAM configuration from config - all values must be provided in deployment-config.json
+    const ipamCidrBlocks = config.requireObject<string[]>("ipamCidrBlocks");
+    const ipamOperatingRegions = config.requireObject<string[]>("ipamOperatingRegions");
+    const ipamRegionalPoolNetmask = config.requireNumber("ipamRegionalPoolNetmask");
+    const ipamVpcAllocationNetmask = config.requireNumber("ipamVpcAllocationNetmask");
 
     // Create IPAM only in primary region
     ipam = new IPAMComponent(`ipam-primary`, {
