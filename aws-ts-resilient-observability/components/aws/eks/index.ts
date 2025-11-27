@@ -114,7 +114,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
         // Create node role if we have node groups OR Auto Mode is enabled
         if ((args.nodeGroups && args.nodeGroups.length > 0) || args.autoMode?.enabled) {
-            this.nodeRole = this.createNodeRole();
+            this.nodeRole = this.createNodeRole(args.autoMode?.enabled || false);
         }
 
         // Create EKS cluster
@@ -196,8 +196,9 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
     /**
      * Create EKS node group service role
+     * @param isAutoMode - Whether this role is for Auto Mode (minimal permissions) or traditional node groups (full permissions)
      */
-    private createNodeRole(): aws.iam.Role {
+    private createNodeRole(isAutoMode: boolean = false): aws.iam.Role {
         const roleName = `${this.getResourceName()}-node-role`;
         const role = new aws.iam.Role(
             roleName,
@@ -212,28 +213,33 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
                         }
                     }]
                 }),
-                tags: this.mergeTags({ Role: "EKSNodeGroupServiceRole" })
+                tags: this.mergeTags({
+                    Role: isAutoMode ? "EKSAutoModeNodeRole" : "EKSNodeGroupServiceRole"
+                })
             },
             { parent: this, provider: this.provider }
         );
 
-        // Attach required policies
-        const policies = [
-            "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
-            "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
-            "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-        ];
+        // For Auto Mode, AWS manages the policies automatically
+        // Only attach policies for traditional managed node groups
+        if (!isAutoMode) {
+            const policies = [
+                "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+                "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
+                "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+            ];
 
-        policies.forEach((policyArn, index) => {
-            new aws.iam.RolePolicyAttachment(
-                `${this.getResourceName()}-node-policy-${index}`,
-                {
-                    role: role.name,
-                    policyArn: policyArn
-                },
-                { parent: this, provider: this.provider }
-            );
-        });
+            policies.forEach((policyArn, index) => {
+                new aws.iam.RolePolicyAttachment(
+                    `${this.getResourceName()}-node-policy-${index}`,
+                    {
+                        role: role.name,
+                        policyArn: policyArn
+                    },
+                    { parent: this, provider: this.provider }
+                );
+            });
+        }
 
         return role;
     }
