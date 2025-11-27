@@ -112,7 +112,8 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         // Create IAM roles
         this.clusterRole = this.createClusterRole();
 
-        if (args.nodeGroups && args.nodeGroups.length > 0) {
+        // Create node role if we have node groups OR Auto Mode is enabled
+        if ((args.nodeGroups && args.nodeGroups.length > 0) || args.autoMode?.enabled) {
             this.nodeRole = this.createNodeRole();
         }
 
@@ -268,10 +269,14 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
         // Enable EKS Auto Mode if specified
         if (args.autoMode?.enabled) {
+            if (!this.nodeRole) {
+                throw new Error("Node role is required for EKS Auto Mode but was not created");
+            }
+
             clusterConfig.computeConfig = {
                 enabled: true,
                 nodePools: args.autoMode.nodePools || ["general-purpose"],
-                nodeRoleArn: args.autoMode.nodeRoleArn
+                nodeRoleArn: this.nodeRole.arn
             };
 
             // Auto Mode requires all three configs to be explicitly set
@@ -291,6 +296,9 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
             clusterConfig.accessConfig = {
                 authenticationMode: "API"
             };
+
+            // Auto Mode requires bootstrapSelfManagedAddons to be false
+            clusterConfig.bootstrapSelfManagedAddons = false;
 
             pulumi.log.info(`EKS Auto Mode enabled with node pools: ${args.autoMode.nodePools?.join(", ") || "general-purpose"}`);
         }
