@@ -289,7 +289,7 @@ console.log(`${currentRegion}: Setting up DNS and certificates for ${baseDomain}
 
 // Create shared private Route53 hosted zone for observability services
 // This zone will be created once in the primary region and associated with VPCs in all regions
-const sharedZoneName = `internal.${baseDomain}`;
+const sharedZoneName = baseDomain;
 
 let privateZone: Route53HostedZoneComponent;
 
@@ -314,8 +314,8 @@ if (isPrimary) {
     console.log(`${currentRegion}: Shared private hosted zone created: ${sharedZoneName}`);
 } else {
     // Secondary region: Import the hosted zone and associate it with this region's VPC
-    const primaryStack = new pulumi.StackReference(`shared-services-${primaryRegion}`);
-    const hostedZoneId = primaryStack.requireOutput("sharedHostedZoneId") as pulumi.Output<string>;
+    // Reuse the primaryStack reference already created at the top of the file
+    const hostedZoneId = primaryStack!.requireOutput("sharedHostedZoneId") as pulumi.Output<string>;
 
     // Use VPC Association component for cross-region zone association
     const vpcAssociation = new Route53VpcAssociationComponent(`${currentRegion}-zone-association`, {
@@ -349,8 +349,11 @@ if (enableCertificates) {
     }
 
     // Build certificate args based on validation method
+    // Create region-specific wildcard certificate (e.g., *.us-east-1.internal.srelog.dev)
+    // This allows each region to have its own certificate with unique DNS validation records
+    const regionalDomain = `${currentRegion}.${sharedZoneName}`;
     const certArgs: any = {
-        domainName: `*.${sharedZoneName}`,  // Wildcard for shared zone
+        domainName: `*.${regionalDomain}`,  // Regional wildcard certificate
         validationMethod: certificateValidationMethod as "route53" | "namecheap" | "manual",
         region: currentRegion,
         tags: {
@@ -375,7 +378,7 @@ if (enableCertificates) {
         certArgs
     );
 
-    console.log(`${currentRegion}: ACM certificate requested for *.${currentRegion}.${baseDomain}`);
+    console.log(`${currentRegion}: ACM certificate requested for *.${regionalDomain}`);
     console.log(`${currentRegion}: Validation method: ${certificateValidationMethod}`);
 } else {
     console.log(`${currentRegion}: Certificate creation disabled`);
