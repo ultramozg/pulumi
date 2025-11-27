@@ -13,6 +13,10 @@ export interface VpcAssociationSpec {
     vpcId: pulumi.Input<string>;
     /** Optional comment for the association */
     comment?: string;
+    /** Region where the hosted zone is located (for cross-region associations) */
+    hostedZoneRegion?: string;
+    /** Enable cross-region association (creates authorization first) */
+    crossRegion?: boolean;
 }
 
 /**
@@ -40,15 +44,20 @@ export interface Route53VpcAssociationOutputs {
  * This is particularly useful for cross-stack scenarios where you need to
  * associate a VPC from one stack with a private hosted zone from another stack.
  *
+ * Features:
+ * - Same-region VPC associations
+ * - Cross-region VPC associations (with automatic authorization)
+ * - Multiple VPC associations in a single component
+ *
  * Example use case:
- * - Shared-services stack creates a private hosted zone for internal.example.com
- * - Workload stack creates a spoke VPC
- * - This component associates the workload VPC with the shared-services hosted zone
- *   to enable DNS resolution of internal service endpoints
+ * - Shared-services stack (us-east-1) creates a private hosted zone for internal.example.com
+ * - Shared-services stack (us-west-2) associates its VPC with the hosted zone (cross-region)
+ * - This enables DNS resolution of internal service endpoints across regions
  */
 export class Route53VpcAssociationComponent extends BaseAWSComponent implements Route53VpcAssociationOutputs {
     public readonly associationIds: pulumi.Output<string[]>;
     public readonly associations: aws.route53.ZoneAssociation[] = [];
+    private readonly authorizations: aws.route53.VpcAssociationAuthorization[] = [];
 
     constructor(
         name: string,
@@ -93,7 +102,46 @@ export class Route53VpcAssociationComponent extends BaseAWSComponent implements 
             this.validateAssociation(spec, index);
 
             const associationName = `${this.getResourceName()}-association-${index}`;
+            let dependsOn: pulumi.Resource[] = [];
 
+            // If cross-region association, create authorization first
+            if (spec.crossRegion && spec.hostedZoneRegion) {
+                this.logger.info("Creating cross-region VPC association authorization", {
+                    index,
+                    hostedZoneRegion: spec.hostedZoneRegion,
+                    vpcRegion: this.region
+                });
+
+                const authorizationName = `${this.getResourceName()}-auth-${index}`;
+
+                // Create provider in the hosted zone's region
+                const authProvider = new aws.Provider(authorizationName, {
+                    region: spec.hostedZoneRegion
+                });
+
+                // Create authorization in the hosted zone's region
+                const authorization = new aws.route53.VpcAssociationAuthorization(
+                    authorizationName,
+                    {
+                        zoneId: spec.zoneId,
+                        vpcId: spec.vpcId,
+                    },
+                    {
+                        parent: this,
+                        provider: authProvider
+                    }
+                );
+
+                this.authorizations.push(authorization);
+                dependsOn.push(authorization);
+
+                this.logger.info("Cross-region authorization created", {
+                    index,
+                    resourceName: authorizationName
+                });
+            }
+
+            // Create the VPC association in the VPC's region
             const association = new aws.route53.ZoneAssociation(
                 associationName,
                 {
@@ -102,7 +150,8 @@ export class Route53VpcAssociationComponent extends BaseAWSComponent implements 
                 },
                 {
                     parent: this,
-                    provider: this.createProvider()
+                    provider: this.createProvider(),
+                    dependsOn: dependsOn.length > 0 ? dependsOn : undefined
                 }
             );
 
@@ -114,6 +163,7 @@ export class Route53VpcAssociationComponent extends BaseAWSComponent implements 
                     index,
                     zoneId,
                     vpcId,
+                    crossRegion: spec.crossRegion || false,
                     resourceName: associationName
                 });
             });

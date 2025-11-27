@@ -112,6 +112,15 @@ export interface LokiHelmConfig {
         enabled: boolean;
         replicas?: number;
     };
+
+    /**
+     * Service configuration for external access
+     */
+    service?: {
+        type?: "ClusterIP" | "LoadBalancer" | "NodePort";
+        annotations?: { [key: string]: string };
+        port?: number;
+    };
 }
 
 /**
@@ -184,6 +193,11 @@ export interface LokiComponentOutputs {
     endpoint: pulumi.Output<string>;
 
     /**
+     * External endpoint (if LoadBalancer service is enabled)
+     */
+    externalEndpoint?: pulumi.Output<string>;
+
+    /**
      * Helm release name
      */
     releaseName: pulumi.Output<string>;
@@ -212,6 +226,7 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
     public readonly bucketArn?: pulumi.Output<string>;
     public readonly serviceAccountRoleArn?: pulumi.Output<string>;
     public readonly endpoint: pulumi.Output<string>;
+    public readonly externalEndpoint?: pulumi.Output<string>;
     public readonly releaseName: pulumi.Output<string>;
     public readonly namespace: pulumi.Output<string>;
 
@@ -269,12 +284,18 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
         this.namespace = pulumi.output(args.helm.namespace || "loki");
         this.endpoint = pulumi.interpolate`loki-gateway.${this.namespace}.svc.cluster.local`;
 
+        // Get external endpoint if LoadBalancer service is configured
+        if (args.helm.service?.type === "LoadBalancer") {
+            this.externalEndpoint = this.getLoadBalancerEndpoint(args);
+        }
+
         // Register outputs
         this.registerOutputs({
             bucketName: this.bucketName,
             bucketArn: this.bucketArn,
             serviceAccountRoleArn: this.serviceAccountRoleArn,
             endpoint: this.endpoint,
+            externalEndpoint: this.externalEndpoint,
             releaseName: this.releaseName,
             namespace: this.namespace
         });
@@ -608,9 +629,27 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
 
         // Configure gateway
         if (args.helm.gateway?.enabled) {
+            const serviceConfig: any = args.helm.service ? {
+                type: args.helm.service.type || "ClusterIP",
+                port: args.helm.service.port || 80,
+                annotations: args.helm.service.annotations || {}
+            } : undefined;
+
+            // If LoadBalancer type, ensure it's internal by default with proper annotations
+            if (serviceConfig && serviceConfig.type === "LoadBalancer") {
+                serviceConfig.annotations = {
+                    "service.beta.kubernetes.io/aws-load-balancer-type": "nlb",
+                    "service.beta.kubernetes.io/aws-load-balancer-internal": "true",
+                    "service.beta.kubernetes.io/aws-load-balancer-scheme": "internal",
+                    "service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled": "true",
+                    ...serviceConfig.annotations  // Allow user overrides
+                };
+            }
+
             baseValues.gateway = {
                 enabled: true,
-                replicas: args.helm.gateway.replicas || 2
+                replicas: args.helm.gateway.replicas || 2,
+                service: serviceConfig
             };
         }
 
@@ -628,6 +667,29 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
         }
 
         return baseValues;
+    }
+
+    /**
+     * Get LoadBalancer endpoint
+     */
+    private getLoadBalancerEndpoint(args: LokiComponentArgs): pulumi.Output<string> {
+        const namespace = args.helm.namespace || "loki";
+        const serviceName = "loki-gateway";
+
+        // Get the service and extract the LoadBalancer hostname
+        const service = k8s.core.v1.Service.get(
+            `loki-gateway-lb-service`,
+            pulumi.interpolate`${namespace}/${serviceName}`,
+            { provider: this.k8sProvider, parent: this }
+        );
+
+        return service.status.apply((status: any) => {
+            if (status?.loadBalancer?.ingress && status.loadBalancer.ingress.length > 0) {
+                const ingress = status.loadBalancer.ingress[0];
+                return ingress.hostname || ingress.ip || "";
+            }
+            return "";
+        });
     }
 
     /**

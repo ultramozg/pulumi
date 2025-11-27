@@ -432,7 +432,7 @@ export class GrafanaComponent extends BaseAWSComponent implements GrafanaCompone
             baseValues.resources = args.helm.resources;
         }
 
-        // Configure ingress
+        // Configure ingress or LoadBalancer service
         if (args.helm.ingress?.enabled) {
             baseValues.ingress = {
                 enabled: true,
@@ -442,6 +442,18 @@ export class GrafanaComponent extends BaseAWSComponent implements GrafanaCompone
                     secretName: args.helm.ingress.tls.secretName || "grafana-tls",
                     hosts: args.helm.ingress.host ? [args.helm.ingress.host] : []
                 }] : []
+            };
+        }
+
+        // Configure service with internal NLB annotations if LoadBalancer
+        baseValues.service = baseValues.service || {};
+        if (baseValues.service.type === "LoadBalancer") {
+            baseValues.service.annotations = {
+                "service.beta.kubernetes.io/aws-load-balancer-type": "nlb",
+                "service.beta.kubernetes.io/aws-load-balancer-internal": "true",
+                "service.beta.kubernetes.io/aws-load-balancer-scheme": "internal",
+                "service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled": "true",
+                ...baseValues.service.annotations
             };
         }
 

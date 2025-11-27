@@ -6,7 +6,7 @@ import { VPCComponent } from "../components/aws/vpc";
 import { IPAMComponent } from "../components/aws/ipam";
 import { RAMShareComponent } from "../components/aws/ram-share";
 import { EKSComponent } from "../components/aws/eks";
-import { Route53HostedZoneComponent } from "../components/aws/route53";
+import { Route53HostedZoneComponent, Route53VpcAssociationComponent } from "../components/aws/route53";
 import { AcmCertificateComponent } from "../components/aws/acm";
 
 // Get configuration from deployment config (set by automation)
@@ -287,28 +287,59 @@ if (certificateValidationMethod === "namecheap") {
 
 console.log(`${currentRegion}: Setting up DNS and certificates for ${baseDomain}`);
 
-// Create private Route53 hosted zone for this region
-const zoneName = `${currentRegion}.${baseDomain}`;
+// Create shared private Route53 hosted zone for observability services
+// This zone will be created once in the primary region and associated with VPCs in all regions
+const sharedZoneName = `internal.${baseDomain}`;
 
-// Route53HostedZoneComponent accepts pulumi.Input<string>[] for vpcIds
-// Pass the Output directly without using apply()
-const privateZone = new Route53HostedZoneComponent(`${currentRegion}-internal-zone`, {
-    region: currentRegion,
-    hostedZones: [{
-        name: zoneName,
-        private: true,
-        vpcIds: [hubVpc.vpcId],
-        comment: `Private zone for ${currentRegion} internal services (Loki, Grafana, etc.)`,
-    }],
-    tags: {
-        Environment: "production",
-        Purpose: "internal-services",
-        Region: currentRegion,
-        IsPrimary: isPrimary.toString(),
-    },
-});
+let privateZone: Route53HostedZoneComponent;
 
-console.log(`${currentRegion}: Private hosted zone will be created: ${zoneName}`);
+if (isPrimary) {
+    // Primary region: Create the shared private hosted zone
+    privateZone = new Route53HostedZoneComponent(`shared-internal-zone`, {
+        region: currentRegion,
+        hostedZones: [{
+            name: sharedZoneName,
+            private: true,
+            vpcIds: [hubVpc.vpcId],
+            comment: `Shared private zone for multi-region observability services (Loki, Tempo, Grafana, etc.)`,
+        }],
+        tags: {
+            Environment: "production",
+            Purpose: "observability-services",
+            MultiRegion: "true",
+            PrimaryRegion: currentRegion,
+        },
+    });
+
+    console.log(`${currentRegion}: Shared private hosted zone created: ${sharedZoneName}`);
+} else {
+    // Secondary region: Import the hosted zone and associate it with this region's VPC
+    const primaryStack = new pulumi.StackReference(`shared-services-${primaryRegion}`);
+    const hostedZoneId = primaryStack.requireOutput("sharedHostedZoneId") as pulumi.Output<string>;
+
+    // Use VPC Association component for cross-region zone association
+    const vpcAssociation = new Route53VpcAssociationComponent(`${currentRegion}-zone-association`, {
+        region: currentRegion,
+        associations: [{
+            zoneId: hostedZoneId,
+            vpcId: hubVpc.vpcId,
+            crossRegion: true,
+            hostedZoneRegion: primaryRegion,
+            comment: `Associate ${sharedZoneName} with ${currentRegion} VPC for cross-region observability services`
+        }],
+        tags: {
+            Environment: "production",
+            Purpose: "observability-cross-region-dns",
+            SecondaryRegion: currentRegion,
+            PrimaryRegion: primaryRegion!
+        }
+    });
+
+    console.log(`${currentRegion}: Associated shared private hosted zone ${sharedZoneName} with VPC (via component)`);
+
+    // Create a placeholder component to maintain the same structure
+    privateZone = {} as Route53HostedZoneComponent;
+}
 
 // Create ACM wildcard certificate (if enabled)
 let certificate: AcmCertificateComponent | undefined;
@@ -319,14 +350,15 @@ if (enableCertificates) {
 
     // Build certificate args based on validation method
     const certArgs: any = {
-        domainName: `*.${currentRegion}.${baseDomain}`,
+        domainName: `*.${sharedZoneName}`,  // Wildcard for shared zone
         validationMethod: certificateValidationMethod as "route53" | "namecheap" | "manual",
         region: currentRegion,
         tags: {
             Environment: "production",
-            Purpose: "internal-services",
+            Purpose: "observability-services",
             Region: currentRegion,
             IsPrimary: isPrimary.toString(),
+            MultiRegion: "true",
         },
     };
 
@@ -385,15 +417,16 @@ export const tgwPeeringAttachmentId = tgwPeering?.peeringAttachment.id;
 export const tgwPeeringState = tgwPeering?.peeringAttachment.state;
 
 // Export DNS and Certificate resources
-export const privateZoneId = privateZone.getHostedZoneId(zoneName);
-export const privateZoneName = zoneName;
+export const sharedHostedZoneId = isPrimary ? privateZone.getHostedZoneId(sharedZoneName) : undefined;
+export const sharedHostedZoneName = sharedZoneName;
 export const certificateArn = certificate?.certificateArn;
 export const internalDomain = `${currentRegion}.${baseDomain}`;
 
-// Export service endpoints (examples for documentation)
-export const lokiEndpoint = `loki.${zoneName}`;
-export const grafanaEndpoint = `grafana.${zoneName}`;
-export const prometheusEndpoint = `prometheus.${zoneName}`;
+// Export service endpoints for geoproximity routing (examples for documentation)
+export const lokiEndpoint = `loki.${sharedZoneName}`;
+export const tempoQueryEndpoint = `tempo-query.${sharedZoneName}`;
+export const tempoDistributorEndpoint = `tempo-distributor.${sharedZoneName}`;
+export const grafanaEndpoint = `grafana.${sharedZoneName}`;
 
 // Export validation records if using manual validation
 export const certificateValidationRecords = certificate?.validationRecords;

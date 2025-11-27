@@ -27,6 +27,15 @@ export interface DNSRecordSpec {
     latencyRoutingPolicy?: {
         region: string;
     };
+    geoproximityRoutingPolicy?: {
+        awsRegion?: string;
+        localZoneGroup?: string;
+        coordinates?: {
+            latitude: string;
+            longitude: string;
+        };
+        bias?: number;
+    };
     aliasTarget?: {
         name: string;
         zoneId: string;
@@ -126,6 +135,15 @@ export class Route53RecordsComponent extends BaseAWSComponent implements Route53
                     failoverRoutingPolicies: recordSpec.failoverRoutingPolicy ? [recordSpec.failoverRoutingPolicy] : undefined,
                     geolocationRoutingPolicies: recordSpec.geolocationRoutingPolicy ? [recordSpec.geolocationRoutingPolicy] : undefined,
                     latencyRoutingPolicies: recordSpec.latencyRoutingPolicy ? [recordSpec.latencyRoutingPolicy] : undefined,
+                    geoproximityRoutingPolicy: recordSpec.geoproximityRoutingPolicy ? {
+                        awsRegion: recordSpec.geoproximityRoutingPolicy.awsRegion,
+                        localZoneGroup: recordSpec.geoproximityRoutingPolicy.localZoneGroup,
+                        coordinates: recordSpec.geoproximityRoutingPolicy.coordinates ? [{
+                            latitude: recordSpec.geoproximityRoutingPolicy.coordinates.latitude,
+                            longitude: recordSpec.geoproximityRoutingPolicy.coordinates.longitude
+                        }] : undefined,
+                        bias: recordSpec.geoproximityRoutingPolicy.bias
+                    } : undefined,
                     aliases: recordSpec.aliasTarget ? [{
                         name: recordSpec.aliasTarget.name,
                         zoneId: recordSpec.aliasTarget.zoneId,

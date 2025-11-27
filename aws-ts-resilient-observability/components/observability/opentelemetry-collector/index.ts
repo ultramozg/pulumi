@@ -121,6 +121,16 @@ export interface OTelCollectorHelmConfig {
      * Replica count (for deployment mode)
      */
     replicas?: number;
+
+    /**
+     * Service configuration for external access
+     */
+    service?: {
+        type?: "ClusterIP" | "LoadBalancer" | "NodePort";
+        annotations?: { [key: string]: string };
+        otlpGrpcPort?: number;
+        otlpHttpPort?: number;
+    };
 }
 
 /**
@@ -409,6 +419,40 @@ export class OTelCollectorComponent extends BaseAWSComponent implements OTelColl
         // Configure resources
         if (args.helm.resources) {
             baseValues.resources = args.helm.resources;
+        }
+
+        // Configure service for external access
+        if (args.helm.service) {
+            const serviceAnnotations = args.helm.service.type === "LoadBalancer" ? {
+                "service.beta.kubernetes.io/aws-load-balancer-type": "nlb",
+                "service.beta.kubernetes.io/aws-load-balancer-internal": "true",
+                "service.beta.kubernetes.io/aws-load-balancer-scheme": "internal",
+                "service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled": "true",
+                ...args.helm.service.annotations
+            } : args.helm.service.annotations || {};
+
+            baseValues.service = {
+                type: args.helm.service.type || "ClusterIP",
+                annotations: serviceAnnotations
+            };
+
+            // Configure ports if LoadBalancer
+            if (args.helm.service.type === "LoadBalancer") {
+                baseValues.ports = {
+                    "otlp-grpc": {
+                        enabled: true,
+                        containerPort: 4317,
+                        servicePort: args.helm.service.otlpGrpcPort || 4317,
+                        protocol: "TCP"
+                    },
+                    "otlp-http": {
+                        enabled: true,
+                        containerPort: 4318,
+                        servicePort: args.helm.service.otlpHttpPort || 4318,
+                        protocol: "TCP"
+                    }
+                };
+            }
         }
 
         // Merge with custom values

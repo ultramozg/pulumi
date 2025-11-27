@@ -119,6 +119,16 @@ export interface TempoHelmConfig {
         enabled: boolean;
         remoteWriteUrl?: string;
     };
+
+    /**
+     * Service configuration for external access
+     */
+    service?: {
+        type?: "ClusterIP" | "LoadBalancer" | "NodePort";
+        annotations?: { [key: string]: string };
+        queryPort?: number;
+        distributorPort?: number;
+    };
 }
 
 /**
@@ -196,6 +206,16 @@ export interface TempoComponentOutputs {
     distributorEndpoint: pulumi.Output<string>;
 
     /**
+     * External query endpoint (if LoadBalancer service is enabled)
+     */
+    externalQueryEndpoint?: pulumi.Output<string>;
+
+    /**
+     * External distributor endpoint (if LoadBalancer service is enabled)
+     */
+    externalDistributorEndpoint?: pulumi.Output<string>;
+
+    /**
      * Helm release name
      */
     releaseName: pulumi.Output<string>;
@@ -227,6 +247,8 @@ export class TempoComponent extends BaseAWSComponent implements TempoComponentOu
     public readonly serviceAccountRoleArn?: pulumi.Output<string>;
     public readonly queryEndpoint: pulumi.Output<string>;
     public readonly distributorEndpoint: pulumi.Output<string>;
+    public readonly externalQueryEndpoint?: pulumi.Output<string>;
+    public readonly externalDistributorEndpoint?: pulumi.Output<string>;
     public readonly releaseName: pulumi.Output<string>;
     public readonly namespace: pulumi.Output<string>;
 
@@ -637,6 +659,46 @@ export class TempoComponent extends BaseAWSComponent implements TempoComponentOu
         // Configure resources
         if (args.helm.resources) {
             baseValues.tempo.resources = args.helm.resources;
+        }
+
+        // Configure service for external access
+        if (args.helm.service) {
+            // Prepare internal NLB annotations for LoadBalancer type
+            const getServiceAnnotations = (baseAnnotations: { [key: string]: string } = {}) => {
+                if (args.helm.service!.type === "LoadBalancer") {
+                    return {
+                        "service.beta.kubernetes.io/aws-load-balancer-type": "nlb",
+                        "service.beta.kubernetes.io/aws-load-balancer-internal": "true",
+                        "service.beta.kubernetes.io/aws-load-balancer-scheme": "internal",
+                        "service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled": "true",
+                        ...baseAnnotations  // Allow user overrides
+                    };
+                }
+                return baseAnnotations;
+            };
+
+            if (args.distributed) {
+                // For distributed mode, configure separate services
+                baseValues.queryFrontend = baseValues.queryFrontend || {};
+                baseValues.queryFrontend.service = {
+                    type: args.helm.service.type || "ClusterIP",
+                    annotations: getServiceAnnotations(args.helm.service.annotations),
+                    port: args.helm.service.queryPort || 3100
+                };
+
+                baseValues.distributor = baseValues.distributor || {};
+                baseValues.distributor.service = {
+                    type: args.helm.service.type || "ClusterIP",
+                    annotations: getServiceAnnotations(args.helm.service.annotations),
+                    port: args.helm.service.distributorPort || 4317
+                };
+            } else {
+                // For monolithic mode, single service
+                baseValues.service = {
+                    type: args.helm.service.type || "ClusterIP",
+                    annotations: getServiceAnnotations(args.helm.service.annotations)
+                };
+            }
         }
 
         // Merge with custom values
