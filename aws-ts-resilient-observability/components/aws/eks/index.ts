@@ -355,11 +355,34 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
     /**
      * Install EKS addons
+     *
+     * Note: When Auto Mode is enabled, the following addons are automatically managed by AWS:
+     * - vpc-cni
+     * - coredns
+     * - kube-proxy
+     * - aws-ebs-csi-driver
+     *
+     * This method will skip these addons if Auto Mode is enabled.
      */
     private installAddons(args: EKSComponentArgs): void {
         if (!args.addons) return;
 
+        // Addons that are automatically managed by Auto Mode
+        const autoModeManagedAddons = [
+            'vpc-cni',
+            'coredns',
+            'kube-proxy',
+            'aws-ebs-csi-driver'
+        ];
+
         args.addons.forEach(addonName => {
+            // Skip Auto Mode-managed addons if Auto Mode is enabled
+            if (args.autoMode?.enabled && autoModeManagedAddons.includes(addonName)) {
+                pulumi.log.info(`Skipping addon '${addonName}' - automatically managed by EKS Auto Mode`);
+                return;
+            }
+
+            // Install the addon (either Auto Mode is disabled, or this is a non-managed addon)
             new aws.eks.Addon(
                 `${this.getResourceName()}-addon-${addonName}`,
                 {
