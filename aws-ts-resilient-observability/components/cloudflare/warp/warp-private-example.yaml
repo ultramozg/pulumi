@@ -1,0 +1,199 @@
+# Cloudflare WARP Private Network Configuration
+#
+# This configuration sets up ZERO internet exposure.
+# Services are ONLY accessible via Cloudflare WARP client on your laptop.
+#
+# Perfect for:
+# - Internal tools (Grafana, monitoring dashboards)
+# - Development environments
+# - Admin panels
+# - Sensitive data access
+
+shared-services:
+  # ==========================================================================
+  # CLOUDFLARE TUNNEL - PRIVATE MODE (WARP ONLY)
+  # ==========================================================================
+
+  enableCloudflareTunnel: true
+
+  # Tunnel Token (from Cloudflare Dashboard)
+  # Get from: Cloudflare Dashboard → Zero Trust → Networks → Tunnels → Your Tunnel → Configure
+  cloudflareTunnelToken: "${cloudflare.tunnelToken}"  # From Pulumi ESC
+
+  # Tunnel Configuration
+  cloudflareTunnelReplicas: 2
+  cloudflaredImage: "cloudflare/cloudflared:latest"
+
+# =============================================================================
+# SETUP INSTRUCTIONS
+# =============================================================================
+
+# 1. Deploy the tunnel:
+#    pulumi up -s shared-services-primary
+#    pulumi up -s shared-services-secondary  # If using multi-region
+
+# 2. Set up Cloudflare Zero Trust:
+#    a. Go to https://one.dash.cloudflare.com/
+#    b. Create organization (if not exists)
+#    c. Go to Networks → Tunnels → Your tunnel
+#    d. Click "Configure" → "Private Network"
+#    e. Add your VPC CIDR ranges:
+#       - 10.0.0.0/8      # Your VPC
+#       - 172.16.0.0/12   # Kubernetes network
+#       - 100.64.0.0/10   # Pod network (if using)
+
+# 3. Configure device enrollment:
+#    a. Settings → WARP Client → Device enrollment
+#    b. Create rule: Allow your email domain
+#    c. Save enrollment token
+
+# 4. Install WARP on your laptop:
+#    # macOS
+#    brew install --cask cloudflare-warp
+#
+#    # Windows
+#    Download from: https://cloudflarewarp.com/
+#
+#    # Linux
+#    curl https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-archive-keyring.gpg
+#    echo "deb [signed-by=/usr/share/keyrings/cloudflare-archive-keyring.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+#    sudo apt update && sudo apt install cloudflare-warp
+
+# 5. Enroll your device:
+#    a. Open Cloudflare WARP app
+#    b. Settings → Preferences → Account
+#    c. Login to Cloudflare Zero Trust
+#    d. Enter your team name
+#    e. Authenticate
+
+# 6. Connect:
+#    Toggle WARP ON in the app
+
+# 7. Access services:
+#    Open browser and go to:
+#    - http://grafana.monitoring.svc.cluster.local:3000
+#    - http://loki.monitoring.svc.cluster.local:3100
+#    - http://tempo.monitoring.svc.cluster.local:3200
+
+# =============================================================================
+# OPTIONAL: Local DNS Aliases
+# =============================================================================
+
+# For easier access, add to /etc/hosts (requires root):
+#
+# sudo nano /etc/hosts
+#
+# Add these lines (replace IPs with your actual service IPs):
+# 10.100.0.50    grafana.local
+# 10.100.0.51    loki.local
+# 10.100.0.52    tempo.local
+# 10.100.0.53    mimir.local
+#
+# Then access via:
+# - http://grafana.local:3000
+# - http://loki.local:3100
+# - http://tempo.local:3200
+
+# =============================================================================
+# SECURITY FEATURES (Included)
+# =============================================================================
+
+# ✅ Zero Internet Exposure
+#    Services never get public IPs or URLs
+
+# ✅ Device Authentication
+#    Only enrolled devices can access
+
+# ✅ User Authentication
+#    User must log in to Cloudflare Zero Trust
+
+# ✅ Multi-Factor Authentication (Optional)
+#    Add MFA requirement in Cloudflare settings
+
+# ✅ Device Posture Checks (Optional)
+#    Require disk encryption, OS version, etc.
+
+# ✅ Audit Logging
+#    See who accessed what and when
+
+# ✅ Automatic Encryption
+#    All traffic encrypted via Cloudflare Tunnel
+
+# =============================================================================
+# MULTI-REGION BENEFITS
+# =============================================================================
+
+# With 2 regions deployed:
+# - WARP automatically connects to closest region
+# - If us-east-1 fails, auto-switches to us-west-2
+# - Seamless failover (< 1 second)
+# - No user impact
+
+# =============================================================================
+# TEAM DEPLOYMENT
+# =============================================================================
+
+# To give access to teammates:
+#
+# 1. Get enrollment link from Cloudflare Dashboard:
+#    Settings → WARP Client → Device enrollment → Get link
+#
+# 2. Send link to teammates
+#
+# 3. They install WARP and click the link to enroll
+#
+# 4. Everyone has private access!
+
+# =============================================================================
+# COST BREAKDOWN
+# =============================================================================
+
+# Cloudflare Zero Trust:     FREE (up to 50 users)
+# Cloudflare Tunnel:         FREE (unlimited traffic)
+# Kubernetes pods (2x2):     $20-40/month
+#
+# TOTAL: $20-40/month for secure private access!
+#
+# Compare to:
+# - VPN server: $50-100/month
+# - Bastion host: $30-50/month
+# - Public ALB with auth: $40-80/month
+
+# =============================================================================
+# TROUBLESHOOTING
+# =============================================================================
+
+# Problem: Cannot reach services
+# Solution:
+#   1. Check WARP is connected: warp-cli status
+#   2. Verify enrollment: WARP app → Settings → Account
+#   3. Check private networks in Cloudflare Dashboard
+
+# Problem: "Connection timeout"
+# Solution:
+#   1. Verify VPC CIDR in Cloudflare private networks
+#   2. Check cloudflared pods are running:
+#      kubectl get pods -n cloudflare-tunnel
+#   3. Check cloudflared logs:
+#      kubectl logs -n cloudflare-tunnel -l app=cloudflared
+
+# Problem: "Access denied"
+# Solution:
+#   1. Check enrollment rules allow your email
+#   2. Try re-enrolling: WARP → Settings → Account → Logout → Login
+
+# =============================================================================
+# MONITORING
+# =============================================================================
+
+# Check tunnel health:
+# cloudflared tunnel info <tunnel-id>
+
+# Check WARP status:
+# warp-cli status
+
+# Check cloudflared logs:
+# kubectl logs -n cloudflare-tunnel -l app=cloudflared
+
+# View access logs:
+# Cloudflare Dashboard → Zero Trust → Logs → Access

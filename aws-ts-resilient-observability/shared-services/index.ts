@@ -1,6 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as namecheap from "pulumi-namecheap";
+import * as k8s from "@pulumi/kubernetes";
 import { TransitGateway } from "../components/aws/transit-gateway";
 import { VPCComponent } from "../components/aws/vpc";
 import { IPAMComponent } from "../components/aws/ipam";
@@ -8,6 +9,7 @@ import { RAMShareComponent } from "../components/aws/ram-share";
 import { EKSComponent } from "../components/aws/eks";
 import { Route53HostedZoneComponent, Route53VpcAssociationComponent } from "../components/aws/route53";
 import { AcmCertificateComponent } from "../components/aws/acm";
+import { CloudflareWarpComponent } from "../components/cloudflare/warp";
 
 // Get configuration from deployment config (set by automation)
 const config = new pulumi.Config("shared-services");
@@ -384,6 +386,55 @@ if (enableCertificates) {
     console.log(`${currentRegion}: Certificate creation disabled`);
 }
 
+// ============================================================================
+// CLOUDFLARE TUNNEL CONFIGURATION
+// ============================================================================
+
+// Cloudflare Tunnel configuration (optional)
+// Deploys cloudflared into the EKS cluster to provide secure access to private services via WARP client
+//
+// SETUP:
+// 1. Create tunnel in Cloudflare Dashboard (Zero Trust → Networks → Tunnels)
+// 2. Configure Private Network routes in dashboard
+// 3. Get tunnel token from dashboard
+// 4. Store token in Pulumi ESC
+// 5. Deploy this component with the token
+//
+// MULTI-REGION SUPPORT:
+// - Both regions deploy cloudflared pods using the SAME tunnel token
+// - Cloudflare automatically load balances between all active connections
+// - Provides automatic failover if one region goes down
+const enableCloudflareTunnel = config.getBoolean("enableCloudflareTunnel") ?? false;
+let cloudflareTunnel: CloudflareWarpComponent | undefined;
+
+if (enableCloudflareTunnel) {
+    // Get tunnel token from Pulumi ESC (same token for both regions)
+    const tunnelToken = config.requireSecret("cloudflareTunnelToken");
+
+    // Create Kubernetes provider for EKS cluster
+    const k8sProvider = new k8s.Provider(`${currentRegion}-k8s-provider`, {
+        kubeconfig: sharedEksCluster.kubeconfig,
+    });
+
+    // Deploy cloudflared in this region
+    cloudflareTunnel = new CloudflareWarpComponent(`${currentRegion}-tunnel`, {
+        tunnelToken: tunnelToken,
+        kubernetesProvider: k8sProvider,
+        namespace: "cloudflare-tunnel",
+        replicas: config.getNumber("cloudflareTunnelReplicas") ?? 2,
+        cloudflaredImage: config.get("cloudflaredImage") ?? "cloudflare/cloudflared:latest",
+        tags: {
+            Region: currentRegion,
+            Purpose: "secure-tunnel-access"
+        }
+    });
+
+    console.log(`${currentRegion}: Cloudflared deployed with ${config.getNumber("cloudflareTunnelReplicas") ?? 2} replicas`);
+    console.log(`${currentRegion}: Configure Private Network routes in Cloudflare Dashboard`);
+} else {
+    console.log(`${currentRegion}: Cloudflare Tunnel disabled`);
+}
+
 // Export important values for cross-stack references
 export const transitGatewayId = transitGateway.transitGateway.id;
 export const transitGatewayArn = transitGateway.transitGateway.arn;
@@ -433,3 +484,8 @@ export const grafanaEndpoint = `grafana.${sharedZoneName}`;
 
 // Export validation records if using manual validation
 export const certificateValidationRecords = certificate?.validationRecords;
+
+// Export Cloudflare Tunnel resources
+export const cloudflareTunnelEnabled = enableCloudflareTunnel;
+export const cloudflareTunnelDeploymentName = cloudflareTunnel?.getDeploymentName();
+export const cloudflareTunnelNamespace = cloudflareTunnel?.getNamespace();
