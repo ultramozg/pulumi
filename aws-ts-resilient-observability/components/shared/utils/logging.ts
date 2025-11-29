@@ -4,10 +4,25 @@ import * as pulumi from "@pulumi/pulumi";
  * Log levels for structured logging
  */
 export enum LogLevel {
-    DEBUG = 'debug',
-    INFO = 'info',
-    WARN = 'warn',
-    ERROR = 'error'
+    DEBUG = 0,
+    INFO = 1,
+    WARN = 2,
+    ERROR = 3
+}
+
+/**
+ * Get the minimum log level from environment variable
+ * Default is INFO to reduce verbosity
+ */
+function getMinLogLevel(): LogLevel {
+    const level = process.env.PULUMI_LOG_LEVEL?.toUpperCase();
+    switch (level) {
+        case 'DEBUG': return LogLevel.DEBUG;
+        case 'INFO': return LogLevel.INFO;
+        case 'WARN': return LogLevel.WARN;
+        case 'ERROR': return LogLevel.ERROR;
+        default: return LogLevel.INFO; // Default to INFO
+    }
 }
 
 /**
@@ -207,21 +222,30 @@ export class ComponentLogger {
         if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
             return;
         }
-        
-        const fullContext = {
-            ...this.baseContext,
-            timestamp: new Date().toISOString(),
-            ...context
-        };
+
+        // Check if this log level should be printed
+        const minLevel = getMinLogLevel();
+        if (level < minLevel) {
+            return;
+        }
 
         const logMessage = `[${this.componentType}:${this.componentName}] ${message}`;
-        const contextString = Object.keys(fullContext).length > 0 
-            ? ` | Context: ${JSON.stringify(fullContext)}`
-            : '';
+
+        // Only include context in DEBUG mode or for ERROR level
+        const includeContext = minLevel === LogLevel.DEBUG || level === LogLevel.ERROR;
+        let contextString = '';
+
+        if (includeContext && context) {
+            const fullContext = {
+                ...this.baseContext,
+                timestamp: new Date().toISOString(),
+                ...context
+            };
+            contextString = ` | Context: ${JSON.stringify(fullContext)}`;
+        }
 
         switch (level) {
             case LogLevel.DEBUG:
-                // Pulumi doesn't have debug level, use info with debug prefix
                 pulumi.log.info(`DEBUG: ${logMessage}${contextString}`);
                 break;
             case LogLevel.INFO:
@@ -257,12 +281,10 @@ export class DeploymentLogger {
      * Log deployment start
      */
     public deploymentStart(totalStacks: number): void {
-        const context = {
-            ...this.baseContext,
+        this.log(LogLevel.INFO, `🚀 Starting deployment: ${this.deploymentName}`, {
             operation: 'deployment_start',
             totalStacks
-        };
-        pulumi.log.info(`🚀 Starting deployment: ${this.deploymentName} | Context: ${JSON.stringify(context)}`);
+        });
     }
 
     /**
@@ -284,36 +306,31 @@ export class DeploymentLogger {
      * Log stack deployment start
      */
     public stackDeploymentStart(stackName: string, groupIndex: number, totalGroups: number): void {
-        const context = {
-            ...this.baseContext,
+        this.log(LogLevel.INFO, `📦 Deploying stack: ${stackName} (group ${groupIndex}/${totalGroups})`, {
             operation: 'stack_deployment_start',
             stackName,
             groupIndex,
             totalGroups
-        };
-        pulumi.log.info(`📦 Deploying stack: ${stackName} (group ${groupIndex}/${totalGroups}) | Context: ${JSON.stringify(context)}`);
+        });
     }
 
     /**
      * Log stack deployment success
      */
     public stackDeploymentSuccess(stackName: string, duration: number, outputs?: Record<string, any>): void {
-        const context = {
-            ...this.baseContext,
+        this.log(LogLevel.INFO, `✅ Stack deployed successfully: ${stackName}`, {
             operation: 'stack_deployment_success',
             stackName,
             duration,
             outputCount: outputs ? Object.keys(outputs).length : 0
-        };
-        pulumi.log.info(`✅ Stack deployed successfully: ${stackName} | Context: ${JSON.stringify(context)}`);
+        });
     }
 
     /**
      * Log stack deployment failure
      */
     public stackDeploymentFailure(stackName: string, error: Error, duration: number): void {
-        const context = {
-            ...this.baseContext,
+        this.log(LogLevel.ERROR, `❌ Stack deployment failed: ${stackName}`, {
             operation: 'stack_deployment_failure',
             stackName,
             duration,
@@ -322,39 +339,34 @@ export class DeploymentLogger {
                 message: error.message,
                 stack: error.stack
             }
-        };
-        pulumi.log.error(`❌ Stack deployment failed: ${stackName} | Context: ${JSON.stringify(context)}`);
+        });
     }
 
     /**
      * Log dependency resolution
      */
     public dependencyResolution(totalGroups: number, groups: string[][]): void {
-        const context = {
-            ...this.baseContext,
+        this.log(LogLevel.INFO, `📋 Dependency resolution completed: ${totalGroups} groups`, {
             operation: 'dependency_resolution',
             totalGroups,
             groups: groups.map((group, index) => ({
                 groupIndex: index + 1,
                 stacks: group
             }))
-        };
-        pulumi.log.info(`📋 Dependency resolution completed: ${totalGroups} groups | Context: ${JSON.stringify(context)}`);
+        });
     }
 
     /**
      * Log group deployment start
      */
     public groupDeploymentStart(groupIndex: number, totalGroups: number, stackNames: string[]): void {
-        const context = {
-            ...this.baseContext,
+        this.log(LogLevel.INFO, `🔄 Deploying group ${groupIndex}/${totalGroups}: ${stackNames.join(', ')}`, {
             operation: 'group_deployment_start',
             groupIndex,
             totalGroups,
             stackNames,
             stackCount: stackNames.length
-        };
-        pulumi.log.info(`🔄 Deploying group ${groupIndex}/${totalGroups}: ${stackNames.join(', ')} | Context: ${JSON.stringify(context)}`);
+        });
     }
 
     /**
@@ -378,27 +390,23 @@ export class DeploymentLogger {
      * Log retry attempt
      */
     public retryAttempt(operation: string, attempt: number, maxAttempts: number, delay: number): void {
-        const context = {
-            ...this.baseContext,
+        this.log(LogLevel.WARN, `🔄 Retrying ${operation} (attempt ${attempt}/${maxAttempts}) after ${delay}ms`, {
             operation: 'retry_attempt',
             retryOperation: operation,
             attempt,
             maxAttempts,
             delay
-        };
-        pulumi.log.warn(`🔄 Retrying ${operation} (attempt ${attempt}/${maxAttempts}) after ${delay}ms | Context: ${JSON.stringify(context)}`);
+        });
     }
 
     /**
      * Log rollback start
      */
     public rollbackStart(reason: string): void {
-        const context = {
-            ...this.baseContext,
+        this.log(LogLevel.WARN, `🔙 Starting rollback: ${reason}`, {
             operation: 'rollback_start',
             reason
-        };
-        pulumi.log.warn(`🔙 Starting rollback: ${reason} | Context: ${JSON.stringify(context)}`);
+        });
     }
 
     /**
@@ -448,15 +456,24 @@ export class DeploymentLogger {
      * Internal logging method
      */
     private log(level: LogLevel, message: string, context?: LogContext): void {
-        const fullContext = {
-            ...this.baseContext,
-            timestamp: new Date().toISOString(),
-            ...context
-        };
+        // Check if this log level should be printed
+        const minLevel = getMinLogLevel();
+        if (level < minLevel) {
+            return;
+        }
 
-        const contextString = Object.keys(fullContext).length > 0 
-            ? ` | Context: ${JSON.stringify(fullContext)}`
-            : '';
+        // Only include context in DEBUG mode or for ERROR level
+        const includeContext = minLevel === LogLevel.DEBUG || level === LogLevel.ERROR;
+        let contextString = '';
+
+        if (includeContext && context) {
+            const fullContext = {
+                ...this.baseContext,
+                timestamp: new Date().toISOString(),
+                ...context
+            };
+            contextString = ` | Context: ${JSON.stringify(fullContext)}`;
+        }
 
         switch (level) {
             case LogLevel.DEBUG:
@@ -501,19 +518,18 @@ export class PerformanceMonitor {
      */
     public end(context?: LogContext): number {
         const duration = Date.now() - this.startTime;
-        
+
         if (this.logger instanceof ComponentLogger) {
             this.logger.operationTiming(this.operation, duration, context);
-        } else {
-            // For DeploymentLogger, we'll use a generic info log
-            const logContext = {
+        } else if (this.logger instanceof DeploymentLogger) {
+            // For DeploymentLogger, use the log method which respects log levels
+            this.logger.info(`Operation completed: ${this.operation} (${duration}ms)`, {
                 operation: this.operation,
                 duration,
                 ...context
-            };
-            pulumi.log.info(`Operation completed: ${this.operation} (${duration}ms) | Context: ${JSON.stringify(logContext)}`);
+            });
         }
-        
+
         return duration;
     }
 
