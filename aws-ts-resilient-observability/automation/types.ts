@@ -19,6 +19,7 @@ export interface StackConfig {
     components: ComponentConfig[];
     tags?: Record<string, string>;
     roleArn?: string;
+    escEnvironments?: string[];
 }
 
 export interface DeploymentConfig {

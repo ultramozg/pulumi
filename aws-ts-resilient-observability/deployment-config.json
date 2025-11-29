@@ -15,6 +15,7 @@
       "configFile": "Pulumi.shared-services-primary.yaml",
       "description": "Shared services in primary region (us-east-1)",
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
+      "escEnvironments": ["namecheap-credentials", "cloudflare-credentials"],
       "components": [
         {
           "type": "ipam",
@@ -124,6 +125,7 @@
       "description": "Shared services in secondary region (us-west-2)",
       "dependencies": ["shared-services-primary"],
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
+      "escEnvironments": ["namecheap-credentials", "cloudflare-credentials"],
       "components": [
         {
           "type": "transit-gateway",

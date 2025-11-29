@@ -309,28 +309,25 @@ export class DeploymentOrchestrator {
                 workDir: stackConfig.workDir
             });
             
-            // Explicitly add ESC environment reference for shared-services stacks
-            // This ensures the automation API loads secrets from ESC
-            if (stackConfig.name.includes('shared-services')) {
+            // Add ESC environments specified in stack configuration
+            if (stackConfig.escEnvironments && stackConfig.escEnvironments.length > 0) {
                 try {
-                    // Check if environment is already added to avoid duplicates
                     const existingEnvironments = await stack.listEnvironments();
                     const workspace = stack.workspace;
 
-                    // Add namecheap-credentials environment
-                    if (!existingEnvironments.includes('namecheap-credentials')) {
-                        await workspace.addEnvironments(stackConfig.stackName || stackConfig.name, 'namecheap-credentials');
-                        console.log(`✅ ESC environment 'namecheap-credentials' loaded for ${stackConfig.name}`);
-                    }
-
-                    // Add cloudflare-credentials environment
-                    if (!existingEnvironments.includes('cloudflare-credentials')) {
-                        await workspace.addEnvironments(stackConfig.stackName || stackConfig.name, 'cloudflare-credentials');
-                        console.log(`✅ ESC environment 'cloudflare-credentials' loaded for ${stackConfig.name}`);
+                    for (const envName of stackConfig.escEnvironments) {
+                        if (!existingEnvironments.includes(envName)) {
+                            await workspace.addEnvironments(stackConfig.stackName || stackConfig.name, envName);
+                            if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                                console.log(`✅ ESC environment '${envName}' loaded for ${stackConfig.name}`);
+                            }
+                        }
                     }
                 } catch (error) {
                     // Environment might already be added from Pulumi.yaml, that's okay
-                    console.log(`Note: ESC environment configuration from Pulumi.yaml`);
+                    if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
+                        console.log(`Note: ESC environment configuration from Pulumi.yaml`);
+                    }
                 }
             }
             
