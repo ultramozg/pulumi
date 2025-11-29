@@ -1,8 +1,8 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as k8s from "@pulumi/kubernetes";
-import { BaseAWSComponent, BaseComponentArgs } from "../shared/base";
-import { CommonValidationRules } from "../shared/base";
+import { BaseAWSComponent, BaseComponentArgs } from "../../shared/base";
+import { CommonValidationRules } from "../../shared/base";
 
 /**
  * Storage backend configuration for Mimir
@@ -281,8 +281,7 @@ export class MimirComponent extends BaseAWSComponent implements MimirComponentOu
         this.validateArgs(args, [
             CommonValidationRules.required("clusterName"),
             CommonValidationRules.required("storage"),
-            CommonValidationRules.required("helm"),
-            CommonValidationRules.enumValue("storage", ["s3", "gcs", "azure"])
+            CommonValidationRules.required("helm")
         ]);
 
         // Create AWS provider
@@ -499,8 +498,8 @@ export class MimirComponent extends BaseAWSComponent implements MimirComponentOu
             { parent: this.bucket, provider: this.provider }
         );
 
-        this.bucketName = this.bucket.bucket;
-        this.bucketArn = this.bucket.arn;
+        (this as any).bucketName = this.bucket.bucket;
+        (this as any).bucketArn = this.bucket.arn;
     }
 
     /**

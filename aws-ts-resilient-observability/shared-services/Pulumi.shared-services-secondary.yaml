@@ -30,3 +30,4 @@ config:
   shared-services:parentDomain: srelog.dev
 environment:
   - namecheap-credentials
+  - cloudflare-credentials

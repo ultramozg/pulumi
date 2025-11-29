@@ -1,8 +1,8 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as k8s from "@pulumi/kubernetes";
-import { BaseAWSComponent, BaseComponentArgs } from "../shared/base";
-import { CommonValidationRules } from "../shared/base";
+import { BaseAWSComponent, BaseComponentArgs } from "../../shared/base";
+import { CommonValidationRules } from "../../shared/base";
 
 /**
  * Grafana datasource configuration
@@ -341,7 +341,7 @@ export class GrafanaComponent extends BaseAWSComponent implements GrafanaCompone
             { parent: random, provider: this.provider }
         );
 
-        return password.secretString;
+        return pulumi.output(password.secretString).apply(s => s || "");
     }
 
     /**

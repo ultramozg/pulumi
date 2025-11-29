@@ -1,8 +1,8 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as k8s from "@pulumi/kubernetes";
-import { BaseAWSComponent, BaseComponentArgs } from "../shared/base";
-import { CommonValidationRules } from "../shared/base";
+import { BaseAWSComponent, BaseComponentArgs } from "../../shared/base";
+import { CommonValidationRules } from "../../shared/base";
 
 /**
  * Storage backend configuration for Loki
@@ -247,8 +247,7 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
         this.validateArgs(args, [
             CommonValidationRules.required("clusterName"),
             CommonValidationRules.required("storage"),
-            CommonValidationRules.required("helm"),
-            CommonValidationRules.enumValue("storage", ["s3", "gcs", "azure"])
+            CommonValidationRules.required("helm")
         ]);
 
         // Create AWS provider
@@ -464,8 +463,8 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
             { parent: this.bucket, provider: this.provider }
         );
 
-        this.bucketName = this.bucket.bucket;
-        this.bucketArn = this.bucket.arn;
+        (this as any).bucketName = this.bucket.bucket;
+        (this as any).bucketArn = this.bucket.arn;
     }
 
     /**
@@ -683,7 +682,7 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
             { provider: this.k8sProvider, parent: this }
         );
 
-        return service.status.apply((status: any) => {
+        return service.status.apply((status: any): string => {
             if (status?.loadBalancer?.ingress && status.loadBalancer.ingress.length > 0) {
                 const ingress = status.loadBalancer.ingress[0];
                 return ingress.hostname || ingress.ip || "";

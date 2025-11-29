@@ -315,10 +315,18 @@ export class DeploymentOrchestrator {
                 try {
                     // Check if environment is already added to avoid duplicates
                     const existingEnvironments = await stack.listEnvironments();
+                    const workspace = stack.workspace;
+
+                    // Add namecheap-credentials environment
                     if (!existingEnvironments.includes('namecheap-credentials')) {
-                        const workspace = stack.workspace;
                         await workspace.addEnvironments(stackConfig.stackName || stackConfig.name, 'namecheap-credentials');
                         console.log(`✅ ESC environment 'namecheap-credentials' loaded for ${stackConfig.name}`);
+                    }
+
+                    // Add cloudflare-credentials environment
+                    if (!existingEnvironments.includes('cloudflare-credentials')) {
+                        await workspace.addEnvironments(stackConfig.stackName || stackConfig.name, 'cloudflare-credentials');
+                        console.log(`✅ ESC environment 'cloudflare-credentials' loaded for ${stackConfig.name}`);
                     }
                 } catch (error) {
                     // Environment might already be added from Pulumi.yaml, that's okay

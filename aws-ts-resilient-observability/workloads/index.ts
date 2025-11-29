@@ -1,9 +1,11 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import * as k8s from "@pulumi/kubernetes";
 import { VPCComponent } from "../components/aws/vpc";
 import { EKSComponent } from "../components/aws/eks";
 import { RDSGlobalComponent } from "../components/aws/rds";
 import { Route53HostedZoneComponent, Route53RecordsComponent, Route53VpcAssociationComponent } from "../components/aws/route53";
+import { OTelCollectorComponent } from "../components/observability/opentelemetry-collector";
 
 // Get configuration
 const config = new pulumi.Config("workloads");
@@ -201,6 +203,61 @@ if (isPrimary) {
     };
 }
 
+// ============================================================================
+// OBSERVABILITY AGENT CONFIGURATION
+// ============================================================================
+
+// OpenTelemetry Collector agent configuration (optional)
+// Deploys OTel Collector agents in workload cluster to send telemetry to shared-services
+//
+// This provides telemetry collection from workload applications:
+// - Collects metrics, traces, and logs from workload pods
+// - Forwards telemetry to shared-services observability stack
+// - Enables distributed tracing across workload and shared services
+const enableOTelAgent = config.getBoolean("enableOTelAgent") ?? false;
+let otelAgent: OTelCollectorComponent | undefined;
+
+if (enableOTelAgent) {
+    // Get observability endpoints from shared-services stack
+    const lokiEndpoint = sharedServicesStackRef.getOutput("observabilityLokiEndpoint");
+    const tempoDistributorEndpoint = sharedServicesStackRef.getOutput("observabilityTempoDistributorEndpoint");
+    const mimirDistributorEndpoint = sharedServicesStackRef.getOutput("observabilityMimirDistributorEndpoint");
+
+    // Create Kubernetes provider for workload EKS cluster
+    const k8sProvider = new k8s.Provider(`${currentRegion}-workload-k8s-provider`, {
+        kubeconfig: workloadEksCluster.kubeconfig,
+    });
+
+    // Deploy OTel Collector agent
+    otelAgent = new OTelCollectorComponent(`${currentRegion}-workload-otel-agent`, {
+        clusterName: workloadEksCluster.clusterName,
+        clusterEndpoint: workloadEksCluster.clusterEndpoint,
+        clusterCertificateAuthority: pulumi.output(""), // Placeholder
+        mode: "daemonset",
+        tempoEndpoint: tempoDistributorEndpoint,
+        mimirEndpoint: mimirDistributorEndpoint,
+        lokiEndpoint: lokiEndpoint,
+        helm: {
+            namespace: "opentelemetry",
+            resources: {
+                requests: {
+                    cpu: "100m",
+                    memory: "128Mi"
+                },
+                limits: {
+                    cpu: "500m",
+                    memory: "512Mi"
+                }
+            }
+        }
+    });
+
+    console.log(`${currentRegion}: OTel Collector agent deployed in workload cluster`);
+    console.log(`${currentRegion}: Forwarding telemetry to shared-services observability stack`);
+} else {
+    console.log(`${currentRegion}: OTel Collector agent disabled`);
+}
+
 // Export important values for cross-stack references
 export const spokeVpcId = spokeVpc.vpcId;
 export const spokeVpcCidrBlock = spokeVpc.cidrBlock;
@@ -221,4 +278,9 @@ export const workloadRoute53Resources = route53Resources;
 export const privateZoneAssociationIds = privateZoneAssociation.associationIds;
 export const associatedPrivateZoneId = privateZoneId;
 export const associatedPrivateZoneName = privateZoneName;
+
+// Export OTel agent resources
+export const otelAgentEnabled = enableOTelAgent;
+export const otelAgentGrpcEndpoint = otelAgent?.otlpGrpcEndpoint;
+export const otelAgentHttpEndpoint = otelAgent?.otlpHttpEndpoint;
 

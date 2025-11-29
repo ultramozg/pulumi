@@ -84,6 +84,30 @@
             "cloudflareTunnelReplicas": 2
           },
           "notes": "Deploys cloudflared to provide secure access via WARP. Requires cloudflareTunnelToken in Pulumi ESC"
+        },
+        {
+          "type": "observability",
+          "name": "primary-observability",
+          "config": {
+            "region": "us-east-1",
+            "enableObservability": true,
+            "loki": {
+              "enabled": true
+            },
+            "tempo": {
+              "enabled": true
+            },
+            "mimir": {
+              "enabled": true
+            },
+            "grafana": {
+              "enabled": true
+            },
+            "otelCollector": {
+              "enabled": true
+            }
+          },
+          "notes": "Deploys full observability stack: Loki (logs), Tempo (traces), Mimir (metrics), Grafana, and OTel Collector"
         }
       ],
       "tags": {
@@ -158,6 +182,30 @@
             "cloudflareTunnelReplicas": 2
           },
           "notes": "Deploys cloudflared to provide secure access via WARP. Uses same tunnel token as primary for multi-region redundancy"
+        },
+        {
+          "type": "observability",
+          "name": "secondary-observability",
+          "config": {
+            "region": "us-west-2",
+            "enableObservability": true,
+            "loki": {
+              "enabled": true
+            },
+            "tempo": {
+              "enabled": true
+            },
+            "mimir": {
+              "enabled": true
+            },
+            "grafana": {
+              "enabled": true
+            },
+            "otelCollector": {
+              "enabled": true
+            }
+          },
+          "notes": "Deploys full observability stack: Loki (logs), Tempo (traces), Mimir (metrics), Grafana, and OTel Collector"
         }
       ],
       "tags": {
@@ -207,6 +255,16 @@
           "config": {
             "hostedZone": "workloads.example.com"
           }
+        },
+        {
+          "type": "observability-agent",
+          "name": "primary-observability-agent",
+          "config": {
+            "region": "us-east-1",
+            "enableOTelAgent": true,
+            "otelCollectorReplicas": 2
+          },
+          "notes": "Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack"
         }
       ],
       "tags": {
@@ -249,6 +307,16 @@
             "globalClusterIdentifier": "workload-global-db",
             "isPrimary": false
           }
+        },
+        {
+          "type": "observability-agent",
+          "name": "secondary-observability-agent",
+          "config": {
+            "region": "us-west-2",
+            "enableOTelAgent": true,
+            "otelCollectorReplicas": 2
+          },
+          "notes": "Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack"
         }
       ],
       "tags": {

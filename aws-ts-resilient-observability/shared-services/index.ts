@@ -10,6 +10,7 @@ import { EKSComponent } from "../components/aws/eks";
 import { Route53HostedZoneComponent, Route53VpcAssociationComponent } from "../components/aws/route53";
 import { AcmCertificateComponent } from "../components/aws/acm";
 import { CloudflareWarpComponent } from "../components/cloudflare/warp";
+import { ObservabilityStackComponent } from "../components/observability";
 
 // Get configuration from deployment config (set by automation)
 const config = new pulumi.Config("shared-services");
@@ -435,6 +436,69 @@ if (enableCloudflareTunnel) {
     console.log(`${currentRegion}: Cloudflare Tunnel disabled`);
 }
 
+// ============================================================================
+// OBSERVABILITY STACK CONFIGURATION
+// ============================================================================
+
+// Observability stack configuration (optional)
+// Deploys Loki, Tempo, Mimir, Grafana, and OpenTelemetry Collector into the EKS cluster
+//
+// This provides a complete observability solution:
+// - Loki: Log aggregation and querying
+// - Tempo: Distributed tracing
+// - Mimir: Metrics storage (Prometheus-compatible)
+// - Grafana: Unified visualization dashboard
+// - OTel Collector: Telemetry collection and forwarding
+const enableObservability = config.getBoolean("enableObservability") ?? false;
+let observabilityStack: ObservabilityStackComponent | undefined;
+
+if (enableObservability) {
+    // Get observability component configurations from config
+    const lokiConfig = config.getObject("loki") as { enabled: boolean } | undefined;
+    const tempoConfig = config.getObject("tempo") as { enabled: boolean } | undefined;
+    const mimirConfig = config.getObject("mimir") as { enabled: boolean } | undefined;
+    const grafanaConfig = config.getObject("grafana") as { enabled: boolean } | undefined;
+    const otelCollectorConfig = config.getObject("otelCollector") as { enabled: boolean } | undefined;
+
+    // Deploy observability stack
+    // Note: ObservabilityStackComponent will create its own Kubernetes provider internally
+    observabilityStack = new ObservabilityStackComponent(`${currentRegion}-observability`, {
+        region: currentRegion,
+        clusterName: sharedEksCluster.clusterName,
+        clusterEndpoint: sharedEksCluster.clusterEndpoint,
+        clusterCertificateAuthority: pulumi.output(""), // Placeholder - will be retrieved by component
+        oidcProviderArn: pulumi.output(""), // Placeholder - will be retrieved by component
+        oidcProviderUrl: sharedEksCluster.oidcIssuerUrl,
+        stack: {
+            loki: lokiConfig || { enabled: true },
+            tempo: tempoConfig || { enabled: true },
+            mimir: mimirConfig || { enabled: true },
+            grafana: grafanaConfig || { enabled: true },
+            otelCollector: otelCollectorConfig || { enabled: true }
+        },
+        commonS3LifecycleRules: {
+            enabled: true,
+            transitionToIA: 30,
+            transitionToGlacier: 90,
+            expiration: 365
+        },
+        tags: {
+            Region: currentRegion,
+            Purpose: "observability",
+            IsPrimary: isPrimary.toString()
+        }
+    });
+
+    console.log(`${currentRegion}: Observability stack deployment initiated`);
+    if (lokiConfig?.enabled) console.log(`${currentRegion}: - Loki enabled (logs)`);
+    if (tempoConfig?.enabled) console.log(`${currentRegion}: - Tempo enabled (traces)`);
+    if (mimirConfig?.enabled) console.log(`${currentRegion}: - Mimir enabled (metrics)`);
+    if (grafanaConfig?.enabled) console.log(`${currentRegion}: - Grafana enabled (visualization)`);
+    if (otelCollectorConfig?.enabled) console.log(`${currentRegion}: - OTel Collector enabled (telemetry)`);
+} else {
+    console.log(`${currentRegion}: Observability stack disabled`);
+}
+
 // Export important values for cross-stack references
 export const transitGatewayId = transitGateway.transitGateway.id;
 export const transitGatewayArn = transitGateway.transitGateway.arn;
@@ -489,3 +553,15 @@ export const certificateValidationRecords = certificate?.validationRecords;
 export const cloudflareTunnelEnabled = enableCloudflareTunnel;
 export const cloudflareTunnelDeploymentName = cloudflareTunnel?.getDeploymentName();
 export const cloudflareTunnelNamespace = cloudflareTunnel?.getNamespace();
+
+// Export Observability Stack resources
+export const observabilityEnabled = enableObservability;
+export const observabilityLokiEndpoint = observabilityStack?.loki?.endpoint;
+export const observabilityTempoQueryEndpoint = observabilityStack?.tempo?.queryEndpoint;
+export const observabilityTempoDistributorEndpoint = observabilityStack?.tempo?.distributorEndpoint;
+export const observabilityMimirQueryEndpoint = observabilityStack?.mimir?.queryEndpoint;
+export const observabilityMimirDistributorEndpoint = observabilityStack?.mimir?.distributorEndpoint;
+export const observabilityGrafanaEndpoint = observabilityStack?.grafana?.endpoint;
+export const observabilityGrafanaPassword = observabilityStack?.grafana?.adminPassword;
+export const observabilityOTelGrpcEndpoint = observabilityStack?.otelCollector?.otlpGrpcEndpoint;
+export const observabilityOTelHttpEndpoint = observabilityStack?.otelCollector?.otlpHttpEndpoint;
