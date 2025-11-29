@@ -74,6 +74,16 @@
             "certificateValidationMethod": "namecheap"
           },
           "notes": "Creates private Route53 zone and ACM certificate. Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'"
+        },
+        {
+          "type": "cloudflare-tunnel",
+          "name": "primary-cloudflare-tunnel",
+          "config": {
+            "region": "us-east-1",
+            "enableCloudflareTunnel": true,
+            "cloudflareTunnelReplicas": 2
+          },
+          "notes": "Deploys cloudflared to provide secure access via WARP. Requires cloudflareTunnelToken in Pulumi ESC"
         }
       ],
       "tags": {
@@ -138,6 +148,16 @@
             "certificateValidationMethod": "namecheap"
           },
           "notes": "Creates private Route53 zone and ACM certificate. Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'"
+        },
+        {
+          "type": "cloudflare-tunnel",
+          "name": "secondary-cloudflare-tunnel",
+          "config": {
+            "region": "us-west-2",
+            "enableCloudflareTunnel": true,
+            "cloudflareTunnelReplicas": 2
+          },
+          "notes": "Deploys cloudflared to provide secure access via WARP. Uses same tunnel token as primary for multi-region redundancy"
         }
       ],
       "tags": {
