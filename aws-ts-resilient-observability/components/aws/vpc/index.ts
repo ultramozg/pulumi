@@ -25,6 +25,10 @@ export interface VPCComponentArgs extends BaseComponentArgs {
     availabilityZoneCount: number;
     /** Subnet specifications */
     subnets: { [name: string]: SubnetSpec };
+    /** Enable S3 Gateway Endpoint for private S3 access via AWS backbone */
+    enableS3GatewayEndpoint?: boolean;
+    /** Enable DynamoDB Gateway Endpoint for private DynamoDB access via AWS backbone */
+    enableDynamoDBGatewayEndpoint?: boolean;
 }
 
 /**
@@ -39,6 +43,8 @@ export interface VPCComponentOutputs extends NetworkingOutputs {
     transitGatewayAttachmentId?: pulumi.Output<string>;
     availabilityZones: pulumi.Output<string[]>;
     subnetsByType: pulumi.Output<{ [type: string]: string[] }>;
+    s3GatewayEndpointId?: pulumi.Output<string>;
+    dynamodbGatewayEndpointId?: pulumi.Output<string>;
 }
 
 /**
@@ -56,6 +62,8 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
     public readonly subnetIds: pulumi.Output<string[]>;
     public readonly subnetsByType: pulumi.Output<{ [type: string]: string[] }>;
     public readonly routeTableIds: pulumi.Output<string[]>;
+    public readonly s3GatewayEndpointId?: pulumi.Output<string>;
+    public readonly dynamodbGatewayEndpointId?: pulumi.Output<string>;
 
     private readonly vpc: aws.ec2.Vpc;
     private readonly internetGateway?: aws.ec2.InternetGateway;
@@ -63,6 +71,8 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
     private readonly transitGatewayAttachment?: aws.ec2transitgateway.VpcAttachment;
     private readonly subnets: { [name: string]: aws.ec2.Subnet } = {};
     private readonly routeTables: { [name: string]: aws.ec2.RouteTable } = {};
+    private s3GatewayEndpoint?: aws.ec2.VpcEndpoint;
+    private dynamodbGatewayEndpoint?: aws.ec2.VpcEndpoint;
 
     constructor(
         name: string,
@@ -124,6 +134,15 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             this.transitGatewayAttachment = this.createTransitGatewayAttachment(args, provider);
         }
 
+        // Create VPC Gateway Endpoints for S3 and DynamoDB (free, route traffic via AWS backbone)
+        if (args.enableS3GatewayEndpoint) {
+            this.s3GatewayEndpoint = this.createS3GatewayEndpoint(provider);
+        }
+
+        if (args.enableDynamoDBGatewayEndpoint) {
+            this.dynamodbGatewayEndpoint = this.createDynamoDBGatewayEndpoint(provider);
+        }
+
         // Set up outputs
         this.vpcId = this.vpc.id;
         this.vpcArn = this.vpc.arn;
@@ -174,6 +193,15 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
         const allRouteTableIds = Object.values(this.routeTables).map(rt => rt.id);
         this.routeTableIds = pulumi.all(allRouteTableIds);
 
+        // Gateway endpoint outputs
+        if (this.s3GatewayEndpoint) {
+            this.s3GatewayEndpointId = this.s3GatewayEndpoint.id;
+        }
+
+        if (this.dynamodbGatewayEndpoint) {
+            this.dynamodbGatewayEndpointId = this.dynamodbGatewayEndpoint.id;
+        }
+
         // Register outputs
         this.registerOutputs({
             vpcId: this.vpcId,
@@ -185,7 +213,9 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             availabilityZones: this.availabilityZones,
             subnetIds: this.subnetIds,
             subnetsByType: this.subnetsByType,
-            routeTableIds: this.routeTableIds
+            routeTableIds: this.routeTableIds,
+            s3GatewayEndpointId: this.s3GatewayEndpointId,
+            dynamodbGatewayEndpointId: this.dynamodbGatewayEndpointId
         });
     }
 
@@ -605,6 +635,74 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 provider: provider
             }
         );
+    }
+
+    /**
+     * Create S3 Gateway Endpoint
+     * Routes S3 traffic through AWS backbone network instead of public internet (free, no data transfer costs)
+     */
+    private createS3GatewayEndpoint(provider: aws.Provider): aws.ec2.VpcEndpoint {
+        const resourceName = this.getResourceName();
+
+        // Collect all route table IDs to associate with the endpoint
+        const routeTableIds = Object.values(this.routeTables).map(rt => rt.id);
+
+        const endpoint = new aws.ec2.VpcEndpoint(
+            `${resourceName}-s3-gateway-endpoint`,
+            {
+                vpcId: this.vpc.id,
+                serviceName: pulumi.interpolate`com.amazonaws.${this.region}.s3`,
+                vpcEndpointType: "Gateway",
+                routeTableIds: routeTableIds,
+                tags: this.mergeTags({
+                    Name: `${resourceName}-s3-gateway-endpoint`,
+                    Purpose: "S3PrivateAccess",
+                    Service: "S3"
+                })
+            },
+            {
+                parent: this,
+                provider: provider
+            }
+        );
+
+        this.logger.info("Created S3 Gateway Endpoint - S3 traffic will route via AWS backbone network");
+
+        return endpoint;
+    }
+
+    /**
+     * Create DynamoDB Gateway Endpoint
+     * Routes DynamoDB traffic through AWS backbone network instead of public internet (free, no data transfer costs)
+     */
+    private createDynamoDBGatewayEndpoint(provider: aws.Provider): aws.ec2.VpcEndpoint {
+        const resourceName = this.getResourceName();
+
+        // Collect all route table IDs to associate with the endpoint
+        const routeTableIds = Object.values(this.routeTables).map(rt => rt.id);
+
+        const endpoint = new aws.ec2.VpcEndpoint(
+            `${resourceName}-dynamodb-gateway-endpoint`,
+            {
+                vpcId: this.vpc.id,
+                serviceName: pulumi.interpolate`com.amazonaws.${this.region}.dynamodb`,
+                vpcEndpointType: "Gateway",
+                routeTableIds: routeTableIds,
+                tags: this.mergeTags({
+                    Name: `${resourceName}-dynamodb-gateway-endpoint`,
+                    Purpose: "DynamoDBPrivateAccess",
+                    Service: "DynamoDB"
+                })
+            },
+            {
+                parent: this,
+                provider: provider
+            }
+        );
+
+        this.logger.info("Created DynamoDB Gateway Endpoint - DynamoDB traffic will route via AWS backbone network");
+
+        return endpoint;
     }
 
     /**
