@@ -1,5 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import * as tls from "@pulumi/tls";
 import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion } from "../../shared/base";
 import { ComputeOutputs } from "../../shared/interfaces";
 
@@ -67,6 +68,7 @@ export interface EKSComponentOutputs extends ComputeOutputs {
     clusterSecurityGroupId: pulumi.Output<string>;
     nodeGroupArns?: pulumi.Output<string[]>;
     oidcIssuerUrl: pulumi.Output<string>;
+    oidcProviderArn: pulumi.Output<string>;
     kubeconfig: pulumi.Output<any>;
 }
 
@@ -84,6 +86,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
     public readonly clusterSecurityGroupId: pulumi.Output<string>;
     public readonly nodeGroupArns?: pulumi.Output<string[]>;
     public readonly oidcIssuerUrl: pulumi.Output<string>;
+    public readonly oidcProviderArn: pulumi.Output<string>;
     public readonly kubeconfig: pulumi.Output<any>;
 
     private readonly cluster: aws.eks.Cluster;
@@ -91,6 +94,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
     private readonly clusterRole: aws.iam.Role;
     private readonly nodeRole?: aws.iam.Role;
     private readonly nodeGroups: aws.eks.NodeGroup[] = [];
+    private readonly oidcProvider: aws.iam.OpenIdConnectProvider;
 
     constructor(
         name: string,
@@ -120,6 +124,9 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         // Create EKS cluster
         this.cluster = this.createCluster(args);
 
+        // Create OIDC provider for IRSA
+        this.oidcProvider = this.createOIDCProvider();
+
         // Create node groups if specified (only if auto mode is not enabled)
         if (args.nodeGroups && args.nodeGroups.length > 0 && !args.autoMode?.enabled) {
             this.createNodeGroups(args);
@@ -137,6 +144,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         this.clusterVersion = this.cluster.version;
         this.clusterSecurityGroupId = this.cluster.vpcConfig.clusterSecurityGroupId;
         this.oidcIssuerUrl = this.cluster.identities[0].oidcs[0].issuer;
+        this.oidcProviderArn = this.oidcProvider.arn;
 
         if (this.nodeGroups.length > 0) {
             this.nodeGroupArns = pulumi.output(this.nodeGroups.map(ng => ng.arn));
@@ -154,6 +162,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
             clusterSecurityGroupId: this.clusterSecurityGroupId,
             nodeGroupArns: this.nodeGroupArns,
             oidcIssuerUrl: this.oidcIssuerUrl,
+            oidcProviderArn: this.oidcProviderArn,
             kubeconfig: this.kubeconfig
         });
     }
@@ -242,6 +251,48 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         }
 
         return role;
+    }
+
+    /**
+     * Create OIDC provider for IRSA (IAM Roles for Service Accounts)
+     *
+     * The thumbprint is dynamically retrieved from the TLS certificate of the OIDC issuer endpoint.
+     * This ensures compatibility if AWS changes their root CA in the future.
+     */
+    private createOIDCProvider(): aws.iam.OpenIdConnectProvider {
+        // Dynamically retrieve the TLS certificate thumbprint from the OIDC issuer endpoint
+        // The thumbprint is the SHA-1 fingerprint of the root CA certificate
+        const thumbprint = this.cluster.identities[0].oidcs[0].issuer.apply(async (issuerUrl) => {
+            const certData = await tls.getCertificate({
+                url: issuerUrl
+            });
+
+            if (!certData.certificates || certData.certificates.length === 0) {
+                throw new Error("No certificates found in OIDC issuer certificate chain");
+            }
+
+            // The last certificate in the chain is the root CA
+            const rootCert = certData.certificates[certData.certificates.length - 1];
+            // Remove colons and convert to lowercase to match AWS format
+            return rootCert.sha1Fingerprint.replace(/:/g, '').toLowerCase();
+        });
+
+        const oidcProvider = new aws.iam.OpenIdConnectProvider(
+            `${this.getResourceName()}-oidc-provider`,
+            {
+                url: this.cluster.identities[0].oidcs[0].issuer,
+                clientIdLists: ["sts.amazonaws.com"],
+                thumbprintLists: [thumbprint],
+                tags: this.mergeTags({ Purpose: "EKS-IRSA" })
+            },
+            {
+                parent: this,
+                provider: this.provider,
+                dependsOn: [this.cluster]
+            }
+        );
+
+        return oidcProvider;
     }
 
     /**

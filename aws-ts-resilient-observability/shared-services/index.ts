@@ -466,8 +466,11 @@ if (enableObservability) {
         region: currentRegion,
         clusterName: sharedEksCluster.clusterName,
         clusterEndpoint: sharedEksCluster.clusterEndpoint,
-        clusterCertificateAuthority: pulumi.output(""), // Placeholder - will be retrieved by component
-        oidcProviderArn: pulumi.output(""), // Placeholder - will be retrieved by component
+        clusterCertificateAuthority: sharedEksCluster.kubeconfig.apply(kc => {
+            const config = typeof kc === 'string' ? JSON.parse(kc) : kc;
+            return config.clusters[0].cluster["certificate-authority-data"];
+        }),
+        oidcProviderArn: sharedEksCluster.oidcProviderArn,
         oidcProviderUrl: sharedEksCluster.oidcIssuerUrl,
         stack: {
             loki: lokiConfig || { enabled: true },

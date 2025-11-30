@@ -45,6 +45,7 @@
         "@pulumi/kubernetes": "^4.24.1",
         "@pulumi/policy": "^1.10.0",
         "@pulumi/pulumi": "^3.113.0",
+        "@pulumi/tls": "^5.2.3",
         "dotenv": "^17.2.3",
         "js-yaml": "^4.1.0",
         "pulumi-namecheap": "^2.2.13"
