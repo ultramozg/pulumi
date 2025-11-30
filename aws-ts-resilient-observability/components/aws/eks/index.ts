@@ -3,6 +3,7 @@ import * as aws from "@pulumi/aws";
 import * as tls from "@pulumi/tls";
 import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion } from "../../shared/base";
 import { ComputeOutputs } from "../../shared/interfaces";
+import { generateEKSKubeconfig } from "../../shared/utils/kubernetes-helpers";
 
 /**
  * EKS Node Group configuration (for traditional managed node groups)
@@ -55,6 +56,11 @@ export interface EKSComponentArgs extends BaseComponentArgs {
             keyArn: string;
         };
     };
+    /**
+     * Optional IAM role ARN to assume when generating EKS authentication tokens.
+     * This is useful for cross-account access or when specific IAM permissions are required.
+     */
+    roleArn?: pulumi.Input<string>;
 }
 
 /**
@@ -151,7 +157,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         }
 
         // Generate kubeconfig
-        this.kubeconfig = this.generateKubeconfig();
+        this.kubeconfig = this.generateKubeconfig(args.roleArn);
 
         // Register outputs
         this.registerOutputs({
@@ -455,47 +461,14 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
     /**
      * Generate kubeconfig for the cluster
      */
-    private generateKubeconfig(): pulumi.Output<any> {
-        return pulumi.all([
-            this.cluster.name,
-            this.cluster.endpoint,
-            this.cluster.certificateAuthority
-        ]).apply(([name, endpoint, ca]) => ({
-            apiVersion: "v1",
-            kind: "Config",
-            clusters: [{
-                cluster: {
-                    server: endpoint,
-                    "certificate-authority-data": ca?.data || "LS0tLS1CRUdJTi..."
-                },
-                name: "kubernetes"
-            }],
-            contexts: [{
-                context: {
-                    cluster: "kubernetes",
-                    user: "aws"
-                },
-                name: "aws"
-            }],
-            "current-context": "aws",
-            users: [{
-                name: "aws",
-                user: {
-                    exec: {
-                        apiVersion: "client.authentication.k8s.io/v1beta1",
-                        command: "aws",
-                        args: [
-                            "eks",
-                            "get-token",
-                            "--cluster-name",
-                            name,
-                            "--region",
-                            this.region
-                        ]
-                    }
-                }
-            }]
-        }));
+    private generateKubeconfig(roleArn?: pulumi.Input<string>): pulumi.Output<any> {
+        return generateEKSKubeconfig({
+            clusterName: this.cluster.name,
+            clusterEndpoint: this.cluster.endpoint,
+            clusterCertificateAuthority: this.cluster.certificateAuthority.apply(ca => ca.data),
+            region: this.region,
+            roleArn: roleArn
+        });
     }
 
     /**

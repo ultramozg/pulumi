@@ -3,6 +3,7 @@ import * as aws from "@pulumi/aws";
 import * as k8s from "@pulumi/kubernetes";
 import { BaseAWSComponent, BaseComponentArgs } from "../../shared/base";
 import { CommonValidationRules } from "../../shared/base";
+import { createEKSKubernetesProvider } from "../../shared/utils/kubernetes-helpers";
 
 /**
  * Grafana datasource configuration
@@ -148,6 +149,11 @@ export interface GrafanaComponentArgs extends BaseComponentArgs {
      * Enable anonymous authentication (read-only)
      */
     anonymousAuth?: boolean;
+
+    /**
+     * Optional IAM role ARN to assume when authenticating to EKS
+     */
+    roleArn?: pulumi.Input<string>;
 }
 
 /**
@@ -260,52 +266,17 @@ export class GrafanaComponent extends BaseAWSComponent implements GrafanaCompone
      * Create Kubernetes provider for EKS cluster
      */
     private createK8sProvider(args: GrafanaComponentArgs): k8s.Provider {
-        const kubeconfig = pulumi.all([
-            args.clusterName,
-            args.clusterEndpoint,
-            args.clusterCertificateAuthority
-        ]).apply(([name, endpoint, ca]) => {
-            return JSON.stringify({
-                apiVersion: "v1",
-                kind: "Config",
-                clusters: [{
-                    cluster: {
-                        server: endpoint,
-                        "certificate-authority-data": ca
-                    },
-                    name: "kubernetes"
-                }],
-                contexts: [{
-                    context: {
-                        cluster: "kubernetes",
-                        user: "aws"
-                    },
-                    name: "aws"
-                }],
-                "current-context": "aws",
-                users: [{
-                    name: "aws",
-                    user: {
-                        exec: {
-                            apiVersion: "client.authentication.k8s.io/v1beta1",
-                            command: "aws",
-                            args: [
-                                "eks",
-                                "get-token",
-                                "--cluster-name",
-                                name,
-                                "--region",
-                                this.region
-                            ]
-                        }
-                    }
-                }]
-            });
-        });
-
-        return new k8s.Provider(`${this.getResourceName()}-k8s-provider`, {
-            kubeconfig: kubeconfig
-        }, { parent: this });
+        return createEKSKubernetesProvider(
+            `${this.getResourceName()}-k8s-provider`,
+            {
+                clusterName: args.clusterName,
+                clusterEndpoint: args.clusterEndpoint,
+                clusterCertificateAuthority: args.clusterCertificateAuthority,
+                region: this.region,
+                roleArn: args.roleArn
+            },
+            { parent: this }
+        );
     }
 
     /**

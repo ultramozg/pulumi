@@ -180,6 +180,7 @@ const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
         nodePools: ["general-purpose", "system"]
     },
     addons: ["vpc-cni", "coredns", "kube-proxy"],
+    roleArn: sharedServicesRoleArn,
     tags: {
         Name: eksClusterName,
         Region: currentRegion,
@@ -413,6 +414,7 @@ if (enableCloudflareTunnel) {
     const tunnelToken = config.requireSecret("cloudflareTunnelToken");
 
     // Create Kubernetes provider for EKS cluster
+    // Note: The kubeconfig already includes the roleArn from sharedEksCluster
     const k8sProvider = new k8s.Provider(`${currentRegion}-k8s-provider`, {
         kubeconfig: sharedEksCluster.kubeconfig,
     });
@@ -472,6 +474,7 @@ if (enableObservability) {
         }),
         oidcProviderArn: sharedEksCluster.oidcProviderArn,
         oidcProviderUrl: sharedEksCluster.oidcIssuerUrl,
+        roleArn: sharedServicesRoleArn,
         stack: {
             loki: lokiConfig || { enabled: true },
             tempo: tempoConfig || { enabled: true },

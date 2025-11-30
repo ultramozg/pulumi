@@ -96,6 +96,11 @@ export interface ObservabilityStackArgs extends BaseComponentArgs {
         transitionToGlacier?: number;
         expiration?: number;
     };
+
+    /**
+     * Optional IAM role ARN to assume when authenticating to EKS
+     */
+    roleArn?: pulumi.Input<string>;
 }
 
 /**
@@ -290,6 +295,7 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
             clusterCertificateAuthority: args.clusterCertificateAuthority,
             oidcProviderArn: args.oidcProviderArn,
             oidcProviderUrl: args.oidcProviderUrl,
+            roleArn: args.roleArn,
             storage: {
                 type: "s3" as const,
                 s3: {
@@ -335,6 +341,7 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
             clusterCertificateAuthority: args.clusterCertificateAuthority,
             oidcProviderArn: args.oidcProviderArn,
             oidcProviderUrl: args.oidcProviderUrl,
+            roleArn: args.roleArn,
             storage: {
                 type: "s3" as const,
                 s3: {
@@ -386,6 +393,7 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
             clusterCertificateAuthority: args.clusterCertificateAuthority,
             oidcProviderArn: args.oidcProviderArn,
             oidcProviderUrl: args.oidcProviderUrl,
+            roleArn: args.roleArn,
             storage: {
                 type: "s3" as const,
                 s3: {
@@ -472,6 +480,7 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
             clusterName: args.clusterName,
             clusterEndpoint: args.clusterEndpoint,
             clusterCertificateAuthority: args.clusterCertificateAuthority,
+            roleArn: args.roleArn,
             datasources: datasources,
             helm: {
                 namespace: "grafana",
@@ -514,6 +523,7 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
             clusterName: args.clusterName,
             clusterEndpoint: args.clusterEndpoint,
             clusterCertificateAuthority: args.clusterCertificateAuthority,
+            roleArn: args.roleArn,
             mode: "daemonset" as const,
             tempoEndpoint: this.tempoComponent?.getDistributorEndpoint(),
             mimirEndpoint: this.mimirComponent?.getDistributorEndpoint(),
