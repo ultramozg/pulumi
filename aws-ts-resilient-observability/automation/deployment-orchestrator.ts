@@ -304,11 +304,31 @@ export class DeploymentOrchestrator {
                 console.log(`${'─'.repeat(60)}`);
             }
             
+            // Extract region from stack config (from first component with a region, or use default)
+            const stackRegion = stackConfig.components?.find(c => c.region)?.region || deploymentConfig?.defaultRegion || 'us-east-1';
+
             const stack = await automation.LocalWorkspace.createOrSelectStack({
                 stackName: stackConfig.stackName || stackConfig.name,
                 workDir: stackConfig.workDir
+            }, {
+                // Ensure AWS credentials from role assumption are passed to Pulumi process
+                envVars: {
+                    // Pass through specific environment variables
+                    ...(process.env.PATH && { PATH: process.env.PATH }),
+                    ...(process.env.HOME && { HOME: process.env.HOME }),
+                    ...(process.env.USER && { USER: process.env.USER }),
+                    // Pass AWS credentials if available
+                    ...(process.env.AWS_ACCESS_KEY_ID && {
+                        AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+                        AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
+                        AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN!,
+                        // Also set the region for AWS CLI
+                        AWS_DEFAULT_REGION: stackRegion,
+                        AWS_REGION: stackRegion
+                    })
+                }
             });
-            
+
             // Add ESC environments specified in stack configuration
             if (stackConfig.escEnvironments && stackConfig.escEnvironments.length > 0) {
                 try {
@@ -474,12 +494,32 @@ export class DeploymentOrchestrator {
             // Show destruction header
             console.log(`\n🗑️  Destroying: ${stackConfig.name}`);
             console.log(`${'─'.repeat(60)}`);
-            
+
+            // Extract region from stack config (from first component with a region, or use default)
+            const stackRegion = stackConfig.components?.find(c => c.region)?.region || 'us-east-1';
+
             const stack = await automation.LocalWorkspace.createOrSelectStack({
                 stackName: stackConfig.stackName || stackConfig.name,
                 workDir: stackConfig.workDir
+            }, {
+                // Ensure AWS credentials from role assumption are passed to Pulumi process
+                envVars: {
+                    // Pass through specific environment variables
+                    ...(process.env.PATH && { PATH: process.env.PATH }),
+                    ...(process.env.HOME && { HOME: process.env.HOME }),
+                    ...(process.env.USER && { USER: process.env.USER }),
+                    // Pass AWS credentials if available
+                    ...(process.env.AWS_ACCESS_KEY_ID && {
+                        AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+                        AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
+                        AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN!,
+                        // Also set the region for AWS CLI
+                        AWS_DEFAULT_REGION: stackRegion,
+                        AWS_REGION: stackRegion
+                    })
+                }
             });
-            
+
             // Set up role assumption if roleArn is provided (CRITICAL for cross-account destroy)
             if (stackConfig.roleArn) {
                 await this.setupRoleAssumption(stackConfig.roleArn, stackConfig.name);

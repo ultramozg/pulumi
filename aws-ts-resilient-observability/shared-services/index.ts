@@ -169,6 +169,9 @@ console.log(`${currentRegion}: Hub VPC attached to Transit Gateway${enableRouteT
 const allVpcCidrs = [hubVpc.cidrBlock];
 
 // Create EKS cluster for shared monitoring services with Auto Mode
+// Note: roleArn is NOT passed to kubeconfig since we're already using an AWS Provider
+// that has assumed the role. The kubectl will use the same credentials from environment variables.
+// adminRoleArn is passed to grant the deployment role cluster admin access via EKS Access Entries.
 const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
     region: currentRegion,
     clusterName: eksClusterName,
@@ -180,7 +183,7 @@ const sharedEksCluster = new EKSComponent(`shared-eks-${currentRegion}`, {
         nodePools: ["general-purpose", "system"]
     },
     addons: ["vpc-cni", "coredns", "kube-proxy"],
-    roleArn: sharedServicesRoleArn,
+    adminRoleArn: sharedServicesRoleArn, // Grant the deployment role cluster admin access
     tags: {
         Name: eksClusterName,
         Region: currentRegion,
@@ -417,6 +420,23 @@ if (enableCloudflareTunnel) {
     // Note: The kubeconfig already includes the roleArn from sharedEksCluster
     const k8sProvider = new k8s.Provider(`${currentRegion}-k8s-provider`, {
         kubeconfig: sharedEksCluster.kubeconfig,
+    }, {
+        // Add transformation to fix invalid Kubernetes labels
+        transformations: [(args) => {
+            if (args.props.metadata?.labels) {
+                const labels = args.props.metadata.labels;
+                // Sanitize label values: replace colons with hyphens
+                for (const key in labels) {
+                    if (typeof labels[key] === 'string' && labels[key].includes(':')) {
+                        labels[key] = labels[key].replace(/:/g, '-');
+                    }
+                }
+            }
+            return {
+                props: args.props,
+                opts: args.opts
+            };
+        }]
     });
 
     // Deploy cloudflared in this region
@@ -474,7 +494,8 @@ if (enableObservability) {
         }),
         oidcProviderArn: sharedEksCluster.oidcProviderArn,
         oidcProviderUrl: sharedEksCluster.oidcIssuerUrl,
-        roleArn: sharedServicesRoleArn,
+        // Note: roleArn is NOT passed since we're already using an AWS Provider
+        // that has assumed the role. The kubectl will use the same credentials from environment variables.
         stack: {
             loki: lokiConfig || { enabled: true },
             tempo: tempoConfig || { enabled: true },

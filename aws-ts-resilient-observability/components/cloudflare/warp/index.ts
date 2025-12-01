@@ -87,16 +87,29 @@ export class CloudflareWarpComponent extends BaseAWSComponent {
         });
 
         // Create namespace for cloudflared
+        // Note: We need to sanitize labels to ensure they're Kubernetes-compliant
+        const labels = {
+            ...this.mergeTags(),
+            "app.kubernetes.io/name": "cloudflared",
+            "app.kubernetes.io/component": "tunnel",
+        };
+
+        // Sanitize labels: replace colons with hyphens (Kubernetes doesn't allow colons in label values)
+        const sanitizedLabels: Record<string, string> = {};
+        for (const [key, value] of Object.entries(labels)) {
+            if (typeof value === 'string') {
+                sanitizedLabels[key] = value.replace(/:/g, '-');
+            } else {
+                sanitizedLabels[key] = String(value);
+            }
+        }
+
         this.namespace = new k8s.core.v1.Namespace(
             `${name}-namespace`,
             {
                 metadata: {
                     name: namespaceName,
-                    labels: {
-                        ...this.mergeTags(),
-                        "app.kubernetes.io/name": "cloudflared",
-                        "app.kubernetes.io/component": "tunnel",
-                    },
+                    labels: sanitizedLabels,
                 },
             },
             {
@@ -129,16 +142,27 @@ export class CloudflareWarpComponent extends BaseAWSComponent {
         this.logger.info("Tunnel token secret created");
 
         // Create Deployment for cloudflared
+        // Sanitize deployment labels too
+        const deploymentLabels: Record<string, string> = {
+            app: "cloudflared",
+            ...this.mergeTags(),
+        };
+        const sanitizedDeploymentLabels: Record<string, string> = {};
+        for (const [key, value] of Object.entries(deploymentLabels)) {
+            if (typeof value === 'string') {
+                sanitizedDeploymentLabels[key] = value.replace(/:/g, '-');
+            } else {
+                sanitizedDeploymentLabels[key] = String(value);
+            }
+        }
+
         this.deployment = new k8s.apps.v1.Deployment(
             `${name}-deployment`,
             {
                 metadata: {
                     name: "cloudflared",
                     namespace: this.namespace.metadata.name,
-                    labels: {
-                        app: "cloudflared",
-                        ...this.mergeTags(),
-                    },
+                    labels: sanitizedDeploymentLabels,
                 },
                 spec: {
                     replicas: replicas,

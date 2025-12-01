@@ -573,12 +573,32 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
                 },
                 storage: {
                     type: args.storage.type
+                },
+                schemaConfig: {
+                    configs: [
+                        {
+                            from: "2024-04-01",
+                            store: "tsdb",
+                            object_store: "s3",
+                            schema: "v13",
+                            index: {
+                                prefix: "loki_index_",
+                                period: "24h"
+                            }
+                        }
+                    ]
                 }
             }
         };
 
         // Configure S3 storage
         if (args.storage.type === "s3" && this.bucketName) {
+            baseValues.loki.storage.bucketNames = pulumi.all([this.bucketName]).apply(([bucket]) => ({
+                chunks: bucket,
+                ruler: bucket,
+                admin: bucket
+            }));
+
             baseValues.loki.storage.s3 = pulumi.all([this.bucketName]).apply(([bucket]) => ({
                 s3: `s3://${this.region}/${bucket}`,
                 region: this.region,

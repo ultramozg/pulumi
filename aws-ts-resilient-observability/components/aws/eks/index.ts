@@ -61,6 +61,13 @@ export interface EKSComponentArgs extends BaseComponentArgs {
      * This is useful for cross-account access or when specific IAM permissions are required.
      */
     roleArn?: pulumi.Input<string>;
+
+    /**
+     * Optional IAM role/user ARN to grant cluster admin access via EKS Access Entries.
+     * If not provided, the current caller identity will be used.
+     * This is useful for cross-account deployments where you want to grant a specific role access.
+     */
+    adminRoleArn?: pulumi.Input<string>;
 }
 
 /**
@@ -129,6 +136,10 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
         // Create EKS cluster
         this.cluster = this.createCluster(args);
+
+        // Grant cluster admin access when using API authentication mode
+        // This is required for kubectl to work when the cluster uses EKS Access Entries
+        this.createClusterCreatorAccessEntry(args.adminRoleArn);
 
         // Create OIDC provider for IRSA
         this.oidcProvider = this.createOIDCProvider();
@@ -299,6 +310,62 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         );
 
         return oidcProvider;
+    }
+
+    /**
+     * Create EKS Access Entry for cluster admin
+     *
+     * Grants the specified IAM role admin access to the cluster via EKS Access Entries.
+     * Required when the cluster uses API authentication mode.
+     *
+     * The adminRoleArn should be provided from the deployment configuration
+     * (e.g., from deployment-config.json via environment variables).
+     *
+     * @param adminRoleArn - IAM role/user ARN to grant cluster admin access (required)
+     */
+    private createClusterCreatorAccessEntry(adminRoleArn?: pulumi.Input<string>): void {
+        if (!adminRoleArn) {
+            throw new Error(
+                "adminRoleArn is required for EKS Access Entry creation. " +
+                "Please provide it in the EKS component configuration."
+            );
+        }
+
+        const principalArn = pulumi.output(adminRoleArn);
+
+        // Create an access entry for the cluster creator with admin permissions
+        new aws.eks.AccessEntry(
+            `${this.getResourceName()}-creator-access`,
+            {
+                clusterName: this.cluster.name,
+                principalArn: principalArn,
+                type: "STANDARD",
+                tags: this.mergeTags({ Purpose: "ClusterCreatorAccess" })
+            },
+            {
+                parent: this,
+                provider: this.provider,
+                dependsOn: [this.cluster]
+            }
+        );
+
+        // Associate the cluster admin policy with the access entry
+        new aws.eks.AccessPolicyAssociation(
+            `${this.getResourceName()}-creator-admin-policy`,
+            {
+                clusterName: this.cluster.name,
+                principalArn: principalArn,
+                policyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy",
+                accessScope: {
+                    type: "cluster"
+                }
+            },
+            {
+                parent: this,
+                provider: this.provider,
+                dependsOn: [this.cluster]
+            }
+        );
     }
 
     /**
