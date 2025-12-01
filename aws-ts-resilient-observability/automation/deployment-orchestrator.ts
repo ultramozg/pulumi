@@ -307,26 +307,43 @@ export class DeploymentOrchestrator {
             // Extract region from stack config (from first component with a region, or use default)
             const stackRegion = stackConfig.components?.find(c => c.region)?.region || deploymentConfig?.defaultRegion || 'us-east-1';
 
+            // Assume role if roleArn is provided (BEFORE creating the stack workspace)
+            let stackCredentials: { accessKeyId: string; secretAccessKey: string; sessionToken: string } | undefined;
+            if (stackConfig.roleArn) {
+                stackCredentials = await this.assumeRole(stackConfig.roleArn, stackConfig.name);
+            }
+
+            // Build environment variables with stack-specific credentials
+            const envVars: Record<string, string> = {
+                // Pass through specific environment variables
+                ...(process.env.PATH && { PATH: process.env.PATH }),
+                ...(process.env.HOME && { HOME: process.env.HOME }),
+                ...(process.env.USER && { USER: process.env.USER }),
+                // Set region
+                AWS_DEFAULT_REGION: stackRegion,
+                AWS_REGION: stackRegion
+            };
+
+            // Add stack-specific credentials if available, otherwise use current credentials
+            if (stackCredentials) {
+                envVars.AWS_ACCESS_KEY_ID = stackCredentials.accessKeyId;
+                envVars.AWS_SECRET_ACCESS_KEY = stackCredentials.secretAccessKey;
+                envVars.AWS_SESSION_TOKEN = stackCredentials.sessionToken;
+            } else if (process.env.AWS_ACCESS_KEY_ID) {
+                // Fall back to current environment credentials
+                envVars.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
+                envVars.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY!;
+                if (process.env.AWS_SESSION_TOKEN) {
+                    envVars.AWS_SESSION_TOKEN = process.env.AWS_SESSION_TOKEN;
+                }
+            }
+
             const stack = await automation.LocalWorkspace.createOrSelectStack({
                 stackName: stackConfig.stackName || stackConfig.name,
                 workDir: stackConfig.workDir
             }, {
-                // Ensure AWS credentials from role assumption are passed to Pulumi process
-                envVars: {
-                    // Pass through specific environment variables
-                    ...(process.env.PATH && { PATH: process.env.PATH }),
-                    ...(process.env.HOME && { HOME: process.env.HOME }),
-                    ...(process.env.USER && { USER: process.env.USER }),
-                    // Pass AWS credentials if available
-                    ...(process.env.AWS_ACCESS_KEY_ID && {
-                        AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-                        AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
-                        AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN!,
-                        // Also set the region for AWS CLI
-                        AWS_DEFAULT_REGION: stackRegion,
-                        AWS_REGION: stackRegion
-                    })
-                }
+                // Pass stack-specific credentials to Pulumi process
+                envVars
             });
 
             // Add ESC environments specified in stack configuration
@@ -349,11 +366,6 @@ export class DeploymentOrchestrator {
                         console.log(`Note: ESC environment configuration from Pulumi.yaml`);
                     }
                 }
-            }
-            
-            // Set up role assumption if roleArn is provided
-            if (stackConfig.roleArn) {
-                await this.setupRoleAssumption(stackConfig.roleArn, stackConfig.name);
             }
             
             // Set stack configuration if provided
@@ -498,32 +510,45 @@ export class DeploymentOrchestrator {
             // Extract region from stack config (from first component with a region, or use default)
             const stackRegion = stackConfig.components?.find(c => c.region)?.region || 'us-east-1';
 
+            // Assume role if roleArn is provided (BEFORE creating the stack workspace)
+            // CRITICAL: This ensures correct credentials for cross-account destroy operations
+            let stackCredentials: { accessKeyId: string; secretAccessKey: string; sessionToken: string } | undefined;
+            if (stackConfig.roleArn) {
+                stackCredentials = await this.assumeRole(stackConfig.roleArn, stackConfig.name);
+            }
+
+            // Build environment variables with stack-specific credentials
+            const envVars: Record<string, string> = {
+                // Pass through specific environment variables
+                ...(process.env.PATH && { PATH: process.env.PATH }),
+                ...(process.env.HOME && { HOME: process.env.HOME }),
+                ...(process.env.USER && { USER: process.env.USER }),
+                // Set region
+                AWS_DEFAULT_REGION: stackRegion,
+                AWS_REGION: stackRegion
+            };
+
+            // Add stack-specific credentials if available, otherwise use current credentials
+            if (stackCredentials) {
+                envVars.AWS_ACCESS_KEY_ID = stackCredentials.accessKeyId;
+                envVars.AWS_SECRET_ACCESS_KEY = stackCredentials.secretAccessKey;
+                envVars.AWS_SESSION_TOKEN = stackCredentials.sessionToken;
+            } else if (process.env.AWS_ACCESS_KEY_ID) {
+                // Fall back to current environment credentials
+                envVars.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
+                envVars.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY!;
+                if (process.env.AWS_SESSION_TOKEN) {
+                    envVars.AWS_SESSION_TOKEN = process.env.AWS_SESSION_TOKEN;
+                }
+            }
+
             const stack = await automation.LocalWorkspace.createOrSelectStack({
                 stackName: stackConfig.stackName || stackConfig.name,
                 workDir: stackConfig.workDir
             }, {
-                // Ensure AWS credentials from role assumption are passed to Pulumi process
-                envVars: {
-                    // Pass through specific environment variables
-                    ...(process.env.PATH && { PATH: process.env.PATH }),
-                    ...(process.env.HOME && { HOME: process.env.HOME }),
-                    ...(process.env.USER && { USER: process.env.USER }),
-                    // Pass AWS credentials if available
-                    ...(process.env.AWS_ACCESS_KEY_ID && {
-                        AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-                        AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
-                        AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN!,
-                        // Also set the region for AWS CLI
-                        AWS_DEFAULT_REGION: stackRegion,
-                        AWS_REGION: stackRegion
-                    })
-                }
+                // Pass stack-specific credentials to Pulumi process
+                envVars
             });
-
-            // Set up role assumption if roleArn is provided (CRITICAL for cross-account destroy)
-            if (stackConfig.roleArn) {
-                await this.setupRoleAssumption(stackConfig.roleArn, stackConfig.name);
-            }
             
             // Show destruction output
             let lastDestroyOutput = '';
@@ -899,29 +924,38 @@ export class DeploymentOrchestrator {
     }
 
     /**
-     * Set up role assumption by configuring AWS credentials
+     * Assume an IAM role and return the temporary credentials
+     * This method does NOT set global environment variables to support parallel operations
+     * @param roleArn - The ARN of the IAM role to assume
+     * @param stackName - The name of the stack (used for session naming)
+     * @returns AWS credentials for the assumed role
      */
-    private async setupRoleAssumption(roleArn: string, stackName: string): Promise<void> {
+    private async assumeRole(roleArn: string, stackName: string): Promise<{
+        accessKeyId: string;
+        secretAccessKey: string;
+        sessionToken: string;
+    }> {
         try {
             const AWS = require('aws-sdk');
             const sts = new AWS.STS();
-            
+
             // Assume the role
             const assumeRoleParams = {
                 RoleArn: roleArn,
                 RoleSessionName: `pulumi-${stackName}-${Date.now()}`,
                 DurationSeconds: 3600 // 1 hour
             };
-            
+
             const assumeRoleResult = await sts.assumeRole(assumeRoleParams).promise();
-            
-            // Set environment variables for the assumed role credentials
-            process.env.AWS_ACCESS_KEY_ID = assumeRoleResult.Credentials.AccessKeyId;
-            process.env.AWS_SECRET_ACCESS_KEY = assumeRoleResult.Credentials.SecretAccessKey;
-            process.env.AWS_SESSION_TOKEN = assumeRoleResult.Credentials.SessionToken;
-            
+
             this.logger?.info(`Successfully assumed role: ${roleArn}`);
-            
+
+            return {
+                accessKeyId: assumeRoleResult.Credentials.AccessKeyId,
+                secretAccessKey: assumeRoleResult.Credentials.SecretAccessKey,
+                sessionToken: assumeRoleResult.Credentials.SessionToken
+            };
+
         } catch (error) {
             const errorMessage = `Failed to assume role ${roleArn}: ${error}`;
             this.logger?.error(errorMessage, error instanceof Error ? error : new Error(String(error)));
