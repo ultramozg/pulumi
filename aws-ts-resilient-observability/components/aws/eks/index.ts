@@ -127,7 +127,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         this.provider = this.createProvider(args.region);
 
         // Create IAM roles
-        this.clusterRole = this.createClusterRole();
+        this.clusterRole = this.createClusterRole(args.autoMode?.enabled || false);
 
         // Create node role if we have node groups OR Auto Mode is enabled
         if ((args.nodeGroups && args.nodeGroups.length > 0) || args.autoMode?.enabled) {
@@ -140,6 +140,11 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         // Grant cluster admin access when using API authentication mode
         // This is required for kubectl to work when the cluster uses EKS Access Entries
         this.createClusterCreatorAccessEntry(args.adminRoleArn);
+
+        // Create access entry for node role if Auto Mode is enabled
+        if (args.autoMode?.enabled && this.nodeRole) {
+            this.createNodeRoleAccessEntry();
+        }
 
         // Create OIDC provider for IRSA
         this.oidcProvider = this.createOIDCProvider();
@@ -186,8 +191,9 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
 
     /**
      * Create EKS cluster service role
+     * @param isAutoMode - Whether this is for Auto Mode (requires additional policies)
      */
-    private createClusterRole(): aws.iam.Role {
+    private createClusterRole(isAutoMode: boolean = false): aws.iam.Role {
         const roleName = `${this.getResourceName()}-cluster-role`;
         const role = new aws.iam.Role(
             roleName,
@@ -195,7 +201,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
                 assumeRolePolicy: JSON.stringify({
                     Version: "2012-10-17",
                     Statement: [{
-                        Action: "sts:AssumeRole",
+                        Action: ["sts:AssumeRole", "sts:TagSession"],
                         Effect: "Allow",
                         Principal: {
                             Service: "eks.amazonaws.com"
@@ -207,7 +213,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
             { parent: this, provider: this.provider }
         );
 
-        // Attach required policies
+        // Attach base cluster policy
         new aws.iam.RolePolicyAttachment(
             `${this.getResourceName()}-cluster-policy`,
             {
@@ -216,6 +222,29 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
             },
             { parent: this, provider: this.provider }
         );
+
+        // Attach Auto Mode specific policies if enabled
+        if (isAutoMode) {
+            const autoModePolicies = [
+                { name: "compute", arn: "arn:aws:iam::aws:policy/AmazonEKSComputePolicy" },
+                { name: "block-storage", arn: "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy" },
+                { name: "load-balancing", arn: "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy" },
+                { name: "networking", arn: "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy" }
+            ];
+
+            autoModePolicies.forEach(policy => {
+                new aws.iam.RolePolicyAttachment(
+                    `${this.getResourceName()}-cluster-${policy.name}-policy`,
+                    {
+                        role: role.name,
+                        policyArn: policy.arn
+                    },
+                    { parent: this, provider: this.provider }
+                );
+            });
+
+            pulumi.log.info("EKS Auto Mode cluster policies attached");
+        }
 
         return role;
     }
@@ -246,9 +275,26 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
             { parent: this, provider: this.provider }
         );
 
-        // For Auto Mode, AWS manages the policies automatically
-        // Only attach policies for traditional managed node groups
-        if (!isAutoMode) {
+        // Attach policies based on whether this is Auto Mode or traditional node groups
+        if (isAutoMode) {
+            // Auto Mode requires minimal policies
+            const policies = [
+                "arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy",
+                "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
+            ];
+
+            policies.forEach((policyArn, index) => {
+                new aws.iam.RolePolicyAttachment(
+                    `${this.getResourceName()}-node-policy-${index}`,
+                    {
+                        role: role.name,
+                        policyArn: policyArn
+                    },
+                    { parent: this, provider: this.provider }
+                );
+            });
+        } else {
+            // Traditional managed node groups require full policies
             const policies = [
                 "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
                 "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
@@ -366,6 +412,54 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
                 dependsOn: [this.cluster]
             }
         );
+    }
+
+    /**
+     * Create EKS Access Entry for Auto Mode node role
+     *
+     * Required for EKS Auto Mode to allow nodes to join the cluster.
+     * This creates an EC2 type access entry and associates the AmazonEKSAutoNodePolicy.
+     */
+    private createNodeRoleAccessEntry(): void {
+        if (!this.nodeRole) {
+            throw new Error("Node role is required but was not created");
+        }
+
+        // Create an access entry for the node role with EC2 type (required for Auto Mode)
+        new aws.eks.AccessEntry(
+            `${this.getResourceName()}-node-access`,
+            {
+                clusterName: this.cluster.name,
+                principalArn: this.nodeRole.arn,
+                type: "EC2",
+                tags: this.mergeTags({ Purpose: "AutoModeNodeAccess" })
+            },
+            {
+                parent: this,
+                provider: this.provider,
+                dependsOn: [this.cluster, this.nodeRole]
+            }
+        );
+
+        // Associate the Auto Node policy with the access entry
+        new aws.eks.AccessPolicyAssociation(
+            `${this.getResourceName()}-node-auto-policy`,
+            {
+                clusterName: this.cluster.name,
+                principalArn: this.nodeRole.arn,
+                policyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSAutoNodePolicy",
+                accessScope: {
+                    type: "cluster"
+                }
+            },
+            {
+                parent: this,
+                provider: this.provider,
+                dependsOn: [this.cluster, this.nodeRole]
+            }
+        );
+
+        pulumi.log.info("EKS Auto Mode node role access entry created with AmazonEKSAutoNodePolicy");
     }
 
     /**
