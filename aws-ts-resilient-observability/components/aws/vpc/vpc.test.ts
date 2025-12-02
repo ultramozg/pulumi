@@ -33,12 +33,12 @@ describe("VPCComponent", () => {
                 public: {
                     type: "public",
                     subnetPrefix: 24,
-                    availabilityZones: ["us-west-2a", "us-west-2b"]
+                    availabilityZones: 2
                 },
                 private: {
-                    type: "private", 
+                    type: "private",
                     subnetPrefix: 24,
-                    availabilityZones: ["us-west-2a", "us-west-2b"]
+                    availabilityZones: 2
                 }
             },
             tags: {
@@ -75,10 +75,10 @@ describe("VPCComponent", () => {
     test("should require either IPAM, CIDR block, or base subnet", () => {
         const invalidArgs = { ...testArgs };
         delete invalidArgs.cidrBlock;
-        
+
         expect(() => {
             new VPCComponent("test-vpc", invalidArgs);
-        }).toThrow("Either ipamPoolArn, cidrBlock, or baseSubnet must be provided");
+        }).toThrow("Either ipamPoolId, cidrBlock, or baseSubnet must be provided");
     });
 
     test("should validate subnet specifications", () => {
@@ -96,11 +96,11 @@ describe("VPCComponent", () => {
                 invalid: {
                     type: "invalid" as any,
                     subnetPrefix: 24,
-                    availabilityZones: ["us-west-2a"]
+                    availabilityZones: 1
                 }
             }
         };
-        
+
         expect(() => {
             new VPCComponent("test-vpc", invalidArgs);
         }).toThrow("Invalid subnet type");
@@ -130,10 +130,10 @@ describe("VPCComponent", () => {
     test("should handle IPAM configuration", async () => {
         const ipamArgs = {
             ...testArgs,
-            ipamPoolArn: "arn:aws:ec2::123456789012:ipam-pool/ipam-pool-12345",
+            ipamPoolId: pulumi.output("ipam-pool-12345"),
         };
         delete ipamArgs.cidrBlock;
-        
+
         const vpc = new VPCComponent("test-vpc", ipamArgs);
         expect(vpc).toBeDefined();
     });
@@ -144,8 +144,41 @@ describe("VPCComponent", () => {
             baseSubnet: "10.1.0.0/16",
         };
         delete baseSubnetArgs.cidrBlock;
-        
+
         const vpc = new VPCComponent("test-vpc", baseSubnetArgs);
         expect(vpc).toBeDefined();
+    });
+
+    test("should create NAT Gateways with zonal strategy", async () => {
+        const natArgs = {
+            ...testArgs,
+            natGatewayEnabled: true,
+            natGatewayStrategy: "zonal" as const,
+        };
+
+        const vpc = new VPCComponent("test-vpc", natArgs);
+        expect(vpc.natGatewayIds).toBeDefined();
+    });
+
+    test("should create NAT Gateway with regional strategy", async () => {
+        const natArgs = {
+            ...testArgs,
+            natGatewayEnabled: true,
+            natGatewayStrategy: "regional" as const,
+        };
+
+        const vpc = new VPCComponent("test-vpc", natArgs);
+        expect(vpc.natGatewayIds).toBeDefined();
+    });
+
+    test("should default to zonal strategy when not specified", async () => {
+        const natArgs = {
+            ...testArgs,
+            natGatewayEnabled: true,
+            // natGatewayStrategy not specified
+        };
+
+        const vpc = new VPCComponent("test-vpc", natArgs);
+        expect(vpc.natGatewayIds).toBeDefined();
     });
 });

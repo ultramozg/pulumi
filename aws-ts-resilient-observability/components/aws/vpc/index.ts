@@ -21,6 +21,13 @@ export interface VPCComponentArgs extends BaseComponentArgs {
     internetGatewayEnabled: boolean;
     /** Enable NAT Gateway */
     natGatewayEnabled: boolean;
+    /**
+     * NAT Gateway strategy:
+     * - 'zonal': One NAT Gateway per AZ (high availability, higher cost)
+     * - 'regional': Single NAT Gateway for all AZs (lower cost, single point of failure)
+     * @default 'zonal'
+     */
+    natGatewayStrategy?: 'zonal' | 'regional';
     /** Number of Availability Zones to use */
     availabilityZoneCount: number;
     /** Subnet specifications */
@@ -491,6 +498,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
 
     /**
      * Create NAT Gateways for private subnet internet access
+     * Supports both zonal (one NAT per AZ) and regional (single NAT) strategies
      */
     private createNATGateways(args: VPCComponentArgs, provider: aws.Provider): void {
         const publicSubnets = Object.entries(this.subnets).filter(([subnetKey, _]) => {
@@ -503,19 +511,25 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             throw new Error("VPCComponent: Cannot create NAT Gateways without public subnets");
         }
 
-        // Create one NAT Gateway per AZ (up to the number of public subnets)
-        publicSubnets.forEach(([subnetKey, subnet]) => {
-            const azIndex = parseInt(subnetKey.split('-')[1], 10);
+        const natGatewayStrategy = args.natGatewayStrategy || 'zonal';
+        const resourceName = this.getResourceName();
+
+        if (natGatewayStrategy === 'regional') {
+            // Regional strategy: Create single NAT Gateway in first AZ
+            const [firstSubnetKey, firstSubnet] = publicSubnets[0];
+            const azIndex = parseInt(firstSubnetKey.split('-')[1], 10);
+
+            this.logger.info(`Creating regional NAT Gateway in AZ ${azIndex} (cost-optimized, reduced availability)`);
 
             // Create Elastic IP for NAT Gateway
-            const resourceName = this.getResourceName();
             const eip = new aws.ec2.Eip(
-                `${resourceName}-eip-nat-${azIndex}`,
+                `${resourceName}-eip-nat-regional`,
                 {
                     domain: "vpc",
                     tags: this.mergeTags({
-                        Name: `${resourceName}-eip-nat-${azIndex}`,
-                        Purpose: "NATGateway"
+                        Name: `${resourceName}-eip-nat-regional`,
+                        Purpose: "NATGateway",
+                        Strategy: "Regional"
                     })
                 },
                 {
@@ -524,15 +538,16 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 }
             );
 
-            // Create NAT Gateway
+            // Create single NAT Gateway
             const natGateway = new aws.ec2.NatGateway(
-                `${resourceName}-nat-${azIndex}`,
+                `${resourceName}-nat-regional`,
                 {
                     allocationId: eip.id,
-                    subnetId: subnet.id,
+                    subnetId: firstSubnet.id,
                     tags: this.mergeTags({
-                        Name: `${resourceName}-nat-${azIndex}`,
-                        AvailabilityZone: azIndex.toString()
+                        Name: `${resourceName}-nat-regional`,
+                        AvailabilityZone: azIndex.toString(),
+                        Strategy: "Regional"
                     })
                 },
                 {
@@ -544,23 +559,86 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
 
             this.natGateways.push(natGateway);
 
-            // Add route to private route table for this AZ
-            const privateRouteTable = this.routeTables[`private-${azIndex}`] || this.routeTables['private'];
-            if (privateRouteTable) {
-                new aws.ec2.Route(
-                    `${resourceName}-route-private-nat-${azIndex}`,
+            // Add route to all private route tables pointing to the single NAT Gateway
+            Object.entries(this.routeTables).forEach(([routeTableKey, routeTable]) => {
+                if (routeTableKey.startsWith('private')) {
+                    new aws.ec2.Route(
+                        `${resourceName}-route-${routeTableKey}-nat-regional`,
+                        {
+                            routeTableId: routeTable.id,
+                            destinationCidrBlock: "0.0.0.0/0",
+                            natGatewayId: natGateway.id
+                        },
+                        {
+                            parent: this,
+                            provider: provider
+                        }
+                    );
+                }
+            });
+        } else {
+            // Zonal strategy: Create one NAT Gateway per AZ (default, high availability)
+            this.logger.info(`Creating zonal NAT Gateways (one per AZ) for high availability`);
+
+            publicSubnets.forEach(([subnetKey, subnet]) => {
+                const azIndex = parseInt(subnetKey.split('-')[1], 10);
+
+                // Create Elastic IP for NAT Gateway
+                const eip = new aws.ec2.Eip(
+                    `${resourceName}-eip-nat-${azIndex}`,
                     {
-                        routeTableId: privateRouteTable.id,
-                        destinationCidrBlock: "0.0.0.0/0",
-                        natGatewayId: natGateway.id
+                        domain: "vpc",
+                        tags: this.mergeTags({
+                            Name: `${resourceName}-eip-nat-${azIndex}`,
+                            Purpose: "NATGateway",
+                            Strategy: "Zonal"
+                        })
                     },
                     {
                         parent: this,
                         provider: provider
                     }
                 );
-            }
-        });
+
+                // Create NAT Gateway
+                const natGateway = new aws.ec2.NatGateway(
+                    `${resourceName}-nat-${azIndex}`,
+                    {
+                        allocationId: eip.id,
+                        subnetId: subnet.id,
+                        tags: this.mergeTags({
+                            Name: `${resourceName}-nat-${azIndex}`,
+                            AvailabilityZone: azIndex.toString(),
+                            Strategy: "Zonal"
+                        })
+                    },
+                    {
+                        parent: this,
+                        provider: provider,
+                        dependsOn: [this.internetGateway!]
+                    }
+                );
+
+                this.natGateways.push(natGateway);
+
+                // Add route to private route table for this AZ
+                const privateRouteTable = this.routeTables[`private-${azIndex}`] || this.routeTables['private'];
+                if (privateRouteTable) {
+                    new aws.ec2.Route(
+                        `${resourceName}-route-private-nat-${azIndex}`,
+                        {
+                            routeTableId: privateRouteTable.id,
+                            destinationCidrBlock: "0.0.0.0/0",
+                            natGatewayId: natGateway.id
+                        },
+                        {
+                            parent: this,
+                            provider: provider
+                        }
+                    );
+                }
+            });
+        }
 
         // Associate private subnets with appropriate route tables
         Object.entries(this.subnets).forEach(([subnetKey, subnet]) => {
@@ -572,7 +650,6 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
                 const routeTable = this.routeTables[`private-${azIndex}`] || this.routeTables['private'];
 
                 if (routeTable) {
-                    const resourceName = this.getResourceName();
                     new aws.ec2.RouteTableAssociation(
                         `${resourceName}-rta-${subnetKey}`,
                         {

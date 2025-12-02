@@ -123,6 +123,7 @@ const hubVpc = new VPCComponent(`hub-vpc-${currentRegion}`, {
     ipamPoolId: ipamPoolId,
     internetGatewayEnabled: true,
     natGatewayEnabled: true,
+    natGatewayStrategy: "regional", // Use single NAT Gateway for cost optimization
     availabilityZoneCount: 3,
     subnets: {
         public: {

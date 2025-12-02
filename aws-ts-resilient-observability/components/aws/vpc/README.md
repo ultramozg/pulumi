@@ -10,44 +10,93 @@ The VPC Component provides flexible VPC deployment with automatic IP management 
 
 - Automatic subnet CIDR calculation based on prefix lengths
 - Support for multiple subnet types (public, private, transit-gateway)
-- Internet Gateway and NAT Gateway configuration
+- Internet Gateway and NAT Gateway configuration with flexible strategies
 - Transit Gateway attachment support
 - Route table management with proper associations
 - Comprehensive validation and error handling
 
+## NAT Gateway Strategies
+
+The VPC component supports two NAT Gateway deployment strategies:
+
+### Zonal Strategy (Default)
+- **High Availability**: One NAT Gateway per availability zone
+- **Cost**: Higher (multiple NAT Gateways + data processing charges per gateway)
+- **Resilience**: If one AZ fails, other AZs maintain internet connectivity
+- **Use case**: Production workloads requiring high availability
+
+### Regional Strategy
+- **Cost-Optimized**: Single NAT Gateway shared across all availability zones
+- **Cost**: Lower (one NAT Gateway + single data processing charge)
+- **Resilience**: Single point of failure - if the AZ with NAT Gateway fails, all private subnets lose internet access
+- **Cross-AZ Data Transfer**: Additional charges for traffic from other AZs
+- **Use case**: Development/test environments, cost-sensitive deployments
+
 ## Usage
 
-### Basic Example with Base Subnet
+### Example with Zonal NAT Gateway (High Availability - Default)
 
 ```typescript
 import { VPCComponent } from "./components/vpc";
 
-const vpc = new VPCComponent("my-vpc", {
+const vpc = new VPCComponent("my-vpc-ha", {
     region: "us-west-2",
     environment: "production",
-    
+
     // Use base subnet for automatic CIDR calculation
     baseSubnet: "10.0.0.0/16",
-    
+
     internetGatewayEnabled: true,
     natGatewayEnabled: true,
+    natGatewayStrategy: "zonal",  // One NAT per AZ (default)
     availabilityZoneCount: 3,
-    
+
     subnets: {
         "public": {
             type: "public",
             subnetPrefix: 24,  // /24 = 256 IPs per subnet
-            availabilityZones: ["a", "b", "c"]
+            availabilityZones: 3
         },
         "private": {
             type: "private",
-            subnetPrefix: 24,  // /24 = 256 IPs per subnet  
-            availabilityZones: ["a", "b", "c"]
+            subnetPrefix: 24,  // /24 = 256 IPs per subnet
+            availabilityZones: 3
+        }
+    }
+});
+```
+
+### Example with Regional NAT Gateway (Cost-Optimized)
+
+```typescript
+import { VPCComponent } from "./components/vpc";
+
+const vpc = new VPCComponent("my-vpc-dev", {
+    region: "us-west-2",
+    environment: "development",
+
+    baseSubnet: "10.1.0.0/16",
+
+    internetGatewayEnabled: true,
+    natGatewayEnabled: true,
+    natGatewayStrategy: "regional",  // Single NAT for all AZs (cost-optimized)
+    availabilityZoneCount: 3,
+
+    subnets: {
+        "public": {
+            type: "public",
+            subnetPrefix: 24,
+            availabilityZones: 3
+        },
+        "private": {
+            type: "private",
+            subnetPrefix: 24,
+            availabilityZones: 3
         },
         "database": {
             type: "private",
             subnetPrefix: 26,  // /26 = 64 IPs per subnet
-            availabilityZones: ["a", "b", "c"]
+            availabilityZones: 3
         }
     }
 });
@@ -101,6 +150,7 @@ const vpc = new VPCComponent("my-vpc", {
 | `ipamPoolArn` | string | No* | IPAM pool ARN for automatic CIDR allocation |
 | `internetGatewayEnabled` | boolean | Yes | Enable Internet Gateway |
 | `natGatewayEnabled` | boolean | Yes | Enable NAT Gateway |
+| `natGatewayStrategy` | string | No | NAT Gateway strategy: "zonal" (one per AZ, HA) or "regional" (single NAT, cost-optimized). Default: "zonal" |
 | `availabilityZoneCount` | number | Yes | Number of AZs to use (1-6) |
 | `subnets` | object | Yes | Subnet specifications |
 | `transitGatewayArn` | string | No | Transit Gateway ARN for attachment |

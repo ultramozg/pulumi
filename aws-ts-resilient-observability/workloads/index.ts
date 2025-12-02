@@ -45,6 +45,7 @@ const spokeVpc = new VPCComponent(`spoke-vpc-${currentRegion}`, {
     ipamPoolId: ipamPoolId, // Use IPAM pool from shared services
     internetGatewayEnabled: true,
     natGatewayEnabled: true,
+    natGatewayStrategy: "regional", // Use single NAT Gateway for cost optimization
     availabilityZoneCount: 3,
     subnets: {
         public: {

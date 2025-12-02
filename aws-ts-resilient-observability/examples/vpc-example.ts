@@ -7,6 +7,7 @@ const basicVpc = new VPCComponent("basic-vpc", {
     cidrBlock: "10.0.0.0/16",
     internetGatewayEnabled: true,
     natGatewayEnabled: true,
+    natGatewayStrategy: "regional", // Use single NAT Gateway for cost optimization
     availabilityZoneCount: 2,
     subnets: {
         public: {
@@ -102,6 +103,7 @@ const fullVpc = new VPCComponent("full-vpc", {
     transitGatewayArn: transitGateway.transitGateway.arn,
     internetGatewayEnabled: true,
     natGatewayEnabled: true,
+    natGatewayStrategy: "regional", // Use single NAT Gateway for cost optimization
     availabilityZoneCount: 3,
     subnets: {
         public: {
