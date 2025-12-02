@@ -326,27 +326,15 @@ export class GrafanaComponent extends BaseAWSComponent implements GrafanaCompone
         // Build Helm values
         const values = this.buildHelmValues(args);
 
-        // Create namespace
-        const ns = new k8s.core.v1.Namespace(
-            `${this.getResourceName()}-namespace`,
-            {
-                metadata: {
-                    name: namespace,
-                    labels: {
-                        name: namespace
-                    }
-                }
-            },
-            { parent: this, provider: this.k8sProvider }
-        );
-
         // Deploy Grafana Helm chart
+        // Let Helm create the namespace automatically
         return new k8s.helm.v3.Release(
             `${this.getResourceName()}-helm`,
             {
                 chart: "grafana",
                 version: chartVersion,
                 namespace: namespace,
+                createNamespace: true,
                 repositoryOpts: {
                     repo: repository
                 },
@@ -356,8 +344,7 @@ export class GrafanaComponent extends BaseAWSComponent implements GrafanaCompone
             },
             {
                 parent: this,
-                provider: this.k8sProvider,
-                dependsOn: [ns]
+                provider: this.k8sProvider
             }
         );
     }

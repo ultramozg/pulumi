@@ -141,10 +141,13 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         // This is required for kubectl to work when the cluster uses EKS Access Entries
         this.createClusterCreatorAccessEntry(args.adminRoleArn);
 
-        // Create access entry for node role if Auto Mode is enabled
-        if (args.autoMode?.enabled && this.nodeRole) {
-            this.createNodeRoleAccessEntry();
-        }
+        // Note: EKS Auto Mode automatically creates the node role access entry
+        // We don't need to create it manually. If you encounter errors about
+        // duplicate AccessEntry, it means Auto Mode has already created it.
+        // Commenting out manual creation to let Auto Mode handle it:
+        // if (args.autoMode?.enabled && this.nodeRole) {
+        //     this.createNodeRoleAccessEntry();
+        // }
 
         // Create OIDC provider for IRSA
         this.oidcProvider = this.createOIDCProvider();
@@ -433,53 +436,6 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
         );
     }
 
-    /**
-     * Create EKS Access Entry for Auto Mode node role
-     *
-     * Required for EKS Auto Mode to allow nodes to join the cluster.
-     * This creates an EC2 type access entry and associates the AmazonEKSAutoNodePolicy.
-     */
-    private createNodeRoleAccessEntry(): void {
-        if (!this.nodeRole) {
-            throw new Error("Node role is required but was not created");
-        }
-
-        // Create an access entry for the node role with EC2 type (required for Auto Mode)
-        new aws.eks.AccessEntry(
-            `${this.getResourceName()}-node-access`,
-            {
-                clusterName: this.cluster.name,
-                principalArn: this.nodeRole.arn,
-                type: "EC2",
-                tags: this.mergeTags({ Purpose: "AutoModeNodeAccess" })
-            },
-            {
-                parent: this,
-                provider: this.provider,
-                dependsOn: [this.cluster, this.nodeRole]
-            }
-        );
-
-        // Associate the Auto Node policy with the access entry
-        new aws.eks.AccessPolicyAssociation(
-            `${this.getResourceName()}-node-auto-policy`,
-            {
-                clusterName: this.cluster.name,
-                principalArn: this.nodeRole.arn,
-                policyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSAutoNodePolicy",
-                accessScope: {
-                    type: "cluster"
-                }
-            },
-            {
-                parent: this,
-                provider: this.provider,
-                dependsOn: [this.cluster, this.nodeRole]
-            }
-        );
-
-        pulumi.log.info("EKS Auto Mode node role access entry created with AmazonEKSAutoNodePolicy");
-    }
 
     /**
      * Create EKS cluster

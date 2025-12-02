@@ -525,27 +525,15 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
         // Build Helm values
         const values = this.buildHelmValues(args);
 
-        // Create namespace
-        const ns = new k8s.core.v1.Namespace(
-            `${this.getResourceName()}-namespace`,
-            {
-                metadata: {
-                    name: namespace,
-                    labels: {
-                        name: namespace
-                    }
-                }
-            },
-            { parent: this, provider: this.k8sProvider }
-        );
-
         // Deploy Loki Helm chart
+        // Let Helm create the namespace automatically
         return new k8s.helm.v3.Release(
             `${this.getResourceName()}-helm`,
             {
                 chart: args.distributed ? "loki-distributed" : "loki",
                 version: chartVersion,
                 namespace: namespace,
+                createNamespace: true,
                 repositoryOpts: {
                     repo: repository
                 },
@@ -555,8 +543,7 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
             },
             {
                 parent: this,
-                provider: this.k8sProvider,
-                dependsOn: [ns]
+                provider: this.k8sProvider
             }
         );
     }
