@@ -575,6 +575,37 @@ export class LokiComponent extends BaseAWSComponent implements LokiComponentOutp
                         }
                     ]
                 }
+            },
+            // Configure persistence with explicit storage class for EKS Auto Mode
+            // EKS Auto Mode provides 'gp2' storage class via aws-ebs-csi-driver
+            write: {
+                persistence: {
+                    enabled: true,
+                    storageClassName: "gp2",
+                    size: "10Gi"
+                }
+            },
+            read: {
+                persistence: {
+                    enabled: true,
+                    storageClassName: "gp2",
+                    size: "10Gi"
+                }
+            },
+            backend: {
+                persistence: {
+                    enabled: true,
+                    storageClassName: "gp2",
+                    size: "10Gi"
+                }
+            },
+            // For single binary mode (non-distributed)
+            singleBinary: {
+                persistence: {
+                    enabled: true,
+                    storageClassName: "gp2",
+                    size: "10Gi"
+                }
             }
         };
 
