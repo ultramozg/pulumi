@@ -223,6 +223,18 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
             { parent: this, provider: this.provider }
         );
 
+        // Attach policy for viewing Kubernetes resources in AWS Console
+        // This allows the cluster to describe pods, deployments, and other Kubernetes resources
+        // Note: Users accessing the console also need appropriate EKS access entries
+        new aws.iam.RolePolicyAttachment(
+            `${this.getResourceName()}-cluster-view-policy`,
+            {
+                role: role.name,
+                policyArn: "arn:aws:iam::aws:policy/AmazonEKSViewPolicy"
+            },
+            { parent: this, provider: this.provider }
+        );
+
         // Attach Auto Mode specific policies if enabled
         if (isAutoMode) {
             const autoModePolicies = [
