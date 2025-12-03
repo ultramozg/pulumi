@@ -1,5 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import * as k8s from "@pulumi/kubernetes";
 import { BaseAWSComponent, BaseComponentArgs } from "../shared/base";
 import { CommonValidationRules } from "../shared/base";
 import { LokiComponent, LokiComponentArgs } from "./loki";
@@ -7,6 +8,7 @@ import { TempoComponent, TempoComponentArgs } from "./tempo";
 import { MimirComponent, MimirComponentArgs } from "./mimir";
 import { GrafanaComponent, GrafanaComponentArgs, GrafanaDatasource } from "./grafana";
 import { OTelCollectorComponent, OTelCollectorComponentArgs } from "./opentelemetry-collector";
+import { createEKSKubernetesProvider } from "../shared/utils/kubernetes-helpers";
 
 /**
  * Observability stack configuration
@@ -224,6 +226,47 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
 
         // Create AWS provider
         this.provider = this.createProvider(args.region);
+
+        // Create Kubernetes provider for managing storage classes
+        const k8sProvider = createEKSKubernetesProvider(
+            `${this.getResourceName()}-k8s-provider`,
+            {
+                clusterName: args.clusterName,
+                clusterEndpoint: args.clusterEndpoint,
+                clusterCertificateAuthority: args.clusterCertificateAuthority,
+                region: this.region,
+                roleArn: args.roleArn
+            },
+            { parent: this }
+        );
+
+        // Create EBS StorageClass for EKS Auto Mode
+        // Note: EKS Auto Mode requires the CSI driver (ebs.csi.eks.amazonaws.com)
+        // If an old gp2 storage class exists with the in-tree driver (kubernetes.io/aws-ebs),
+        // we create a new one with a different name to avoid conflicts
+        new k8s.storage.v1.StorageClass(
+            `${this.getResourceName()}-ebs-sc`,
+            {
+                metadata: {
+                    name: "gp3-encrypted",
+                    annotations: {
+                        "storageclass.kubernetes.io/is-default-class": "true"
+                    }
+                },
+                provisioner: "ebs.csi.eks.amazonaws.com",
+                parameters: {
+                    type: "gp3",
+                    encrypted: "true",
+                    fsType: "ext4"
+                },
+                volumeBindingMode: "WaitForFirstConsumer",
+                allowVolumeExpansion: true
+            },
+            {
+                parent: this,
+                provider: k8sProvider
+            }
+        );
 
         // Deploy Loki if enabled
         if (args.stack.loki?.enabled) {
