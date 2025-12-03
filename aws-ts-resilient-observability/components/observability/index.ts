@@ -354,7 +354,10 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
                         transitionToIA: 30,
                         transitionToGlacier: 90,
                         expiration: 365
-                    }
+                    },
+                    // Automatically empty and delete S3 bucket on stack destruction
+                    // This prevents "bucket not empty" errors during pulumi destroy
+                    forceDestroy: true
                 }
             },
             helm: {
@@ -400,7 +403,9 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
                         transitionToIA: 7,
                         transitionToGlacier: 30,
                         expiration: 90
-                    }
+                    },
+                    // Automatically empty and delete S3 bucket on stack destruction
+                    forceDestroy: true
                 }
             },
             helm: {
@@ -452,7 +457,9 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
                         transitionToIA: 30,
                         transitionToGlacier: 90,
                         expiration: 365
-                    }
+                    },
+                    // Automatically empty and delete S3 bucket on stack destruction
+                    forceDestroy: true
                 }
             },
             helm: {
