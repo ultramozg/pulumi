@@ -260,7 +260,10 @@ export class ObservabilityStackComponent extends BaseAWSComponent implements Obs
                     fsType: "ext4"
                 },
                 volumeBindingMode: "WaitForFirstConsumer",
-                allowVolumeExpansion: true
+                allowVolumeExpansion: true,
+                // Delete EBS volumes when PVCs are deleted
+                // This prevents orphaned volumes after cluster or PVC deletion
+                reclaimPolicy: "Delete"
             },
             {
                 parent: this,
