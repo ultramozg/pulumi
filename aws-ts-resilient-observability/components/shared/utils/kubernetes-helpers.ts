@@ -62,36 +62,14 @@ export function generateEKSKubeconfig(options: KubeconfigOptions): pulumi.Output
             args.push("--role-arn", roleArn);
         }
 
-        // Build environment variables for the exec command
-        // This ensures AWS credentials are passed to kubectl subprocess
-        const execEnv: Array<{ name: string; value: string }> = [];
-
-        if (process.env.AWS_ACCESS_KEY_ID) {
-            execEnv.push({ name: "AWS_ACCESS_KEY_ID", value: process.env.AWS_ACCESS_KEY_ID });
-        }
-        if (process.env.AWS_SECRET_ACCESS_KEY) {
-            execEnv.push({ name: "AWS_SECRET_ACCESS_KEY", value: process.env.AWS_SECRET_ACCESS_KEY });
-        }
-        if (process.env.AWS_SESSION_TOKEN) {
-            execEnv.push({ name: "AWS_SESSION_TOKEN", value: process.env.AWS_SESSION_TOKEN });
-        }
-        if (process.env.AWS_REGION) {
-            execEnv.push({ name: "AWS_REGION", value: process.env.AWS_REGION });
-        }
-        if (process.env.AWS_DEFAULT_REGION) {
-            execEnv.push({ name: "AWS_DEFAULT_REGION", value: process.env.AWS_DEFAULT_REGION });
-        }
-
+        // Don't include environment variables in the kubeconfig
+        // This prevents kubeconfig changes on every deployment when using temporary credentials
+        // The AWS CLI will automatically pick up credentials from the environment or AWS credentials file
         const execConfig: any = {
             apiVersion: "client.authentication.k8s.io/v1beta1",
             command: "aws",
             args: args
         };
-
-        // Only add env if we have credentials to pass
-        if (execEnv.length > 0) {
-            execConfig.env = execEnv;
-        }
 
         return {
             apiVersion: "v1",
