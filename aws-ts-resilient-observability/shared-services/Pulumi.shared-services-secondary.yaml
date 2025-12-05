@@ -28,6 +28,14 @@ config:
   shared-services:certificateValidationMethod: namecheap
   shared-services:enableCertificates: "true"
   shared-services:parentDomain: srelog.dev
+  shared-services:cloudflareTunnelReplicas: "2"
+  shared-services:enableCloudflareTunnel: "true"
+  shared-services:enableObservability: "true"
+  shared-services:grafana: '{"enabled":true}'
+  shared-services:loki: '{"enabled":true}'
+  shared-services:mimir: '{"enabled":true}'
+  shared-services:otelCollector: '{"enabled":true}'
+  shared-services:tempo: '{"enabled":true}'
 environment:
   - namecheap-credentials
   - cloudflare-credentials

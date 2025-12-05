@@ -89,13 +89,28 @@ class AutomationCLI {
         const config = ConfigManager.loadConfig(configPath);
         if (options.stacks) {
             const stacksToDeploy = options.stacks.split(',').map((s: string) => s.trim());
-            config.stacks = config.stacks.filter(stack => stacksToDeploy.includes(stack.name));
-            
-            if (config.stacks.length === 0) {
-                throw new Error(`No matching stacks found. Available stacks: ${ConfigManager.loadConfig(configPath).stacks.map(s => s.name).join(', ')}`);
+            const stacksArray = ConfigManager.getStacksArray(config);
+            const filteredStacks = stacksArray.filter(stack => stacksToDeploy.includes(stack.name || ''));
+
+            if (filteredStacks.length === 0) {
+                const allStacks = ConfigManager.getStacksArray(ConfigManager.loadConfig(configPath));
+                throw new Error(`No matching stacks found. Available stacks: ${allStacks.map(s => s.name).join(', ')}`);
             }
-            
-            console.log(`📦 Deploying only: ${config.stacks.map(s => s.name).join(', ')}`);
+
+            // Update config.stacks with filtered results in the same format
+            if (Array.isArray(config.stacks)) {
+                config.stacks = filteredStacks;
+            } else {
+                const stacksMap: Record<string, any> = {};
+                filteredStacks.forEach(stack => {
+                    if (stack.name) {
+                        stacksMap[stack.name] = stack;
+                    }
+                });
+                config.stacks = stacksMap;
+            }
+
+            console.log(`📦 Deploying only: ${filteredStacks.map(s => s.name).join(', ')}`);
         }
         
         const summary = await this.automation.deployAll(config, {
@@ -156,13 +171,28 @@ class AutomationCLI {
         const config = ConfigManager.loadConfig(configPath);
         if (options.stacks) {
             const stacksToDeploy = options.stacks.split(',').map((s: string) => s.trim());
-            config.stacks = config.stacks.filter(stack => stacksToDeploy.includes(stack.name));
-            
-            if (config.stacks.length === 0) {
-                throw new Error(`No matching stacks found. Available stacks: ${ConfigManager.loadConfig(configPath).stacks.map(s => s.name).join(', ')}`);
+            const stacksArray = ConfigManager.getStacksArray(config);
+            const filteredStacks = stacksArray.filter(stack => stacksToDeploy.includes(stack.name || ''));
+
+            if (filteredStacks.length === 0) {
+                const allStacks = ConfigManager.getStacksArray(ConfigManager.loadConfig(configPath));
+                throw new Error(`No matching stacks found. Available stacks: ${allStacks.map(s => s.name).join(', ')}`);
             }
-            
-            console.log(`📦 Previewing only: ${config.stacks.map(s => s.name).join(', ')}`);
+
+            // Update config.stacks with filtered results in the same format
+            if (Array.isArray(config.stacks)) {
+                config.stacks = filteredStacks;
+            } else {
+                const stacksMap: Record<string, any> = {};
+                filteredStacks.forEach(stack => {
+                    if (stack.name) {
+                        stacksMap[stack.name] = stack;
+                    }
+                });
+                config.stacks = stacksMap;
+            }
+
+            console.log(`📦 Previewing only: ${filteredStacks.map(s => s.name).join(', ')}`);
         }
         
         const summary = await this.automation.previewAll(config, {
@@ -261,12 +291,13 @@ class AutomationCLI {
             const config = ConfigManager.loadConfig(configPath);
             console.log(`✅ Configuration is valid`);
             console.log(`   Deployment: ${config.name}`);
-            console.log(`   Stacks: ${config.stacks.length}`);
+            console.log(`   Stacks: ${ConfigManager.getStacksCount(config.stacks)}`);
             console.log(`   Default Region: ${config.defaultRegion || 'not specified'}`);
             
             // Validate dependencies
-            const stackNames = config.stacks.map(s => s.name);
-            for (const stack of config.stacks) {
+            const stacksArray = ConfigManager.getStacksArray(config);
+            const stackNames = stacksArray.map(s => s.name);
+            for (const stack of stacksArray) {
                 if (stack.dependencies) {
                     for (const dep of stack.dependencies) {
                         if (!stackNames.includes(dep)) {
@@ -296,13 +327,15 @@ class AutomationCLI {
         // This would require implementing stack status checking
         // For now, just show configuration info
         const config = ConfigManager.loadConfig(configPath);
+        const stacksArray = ConfigManager.getStacksArray(config);
         console.log(`\nDeployment: ${config.name}`);
-        console.log(`Stacks (${config.stacks.length}):`);
-        
-        for (const stack of config.stacks) {
+        console.log(`Stacks (${stacksArray.length}):`);
+
+        for (const stack of stacksArray) {
+            const components = ConfigManager.getComponentsArray(stack);
             console.log(`  📦 ${stack.name}`);
             console.log(`     Work Dir: ${stack.workDir}`);
-            console.log(`     Components: ${stack.components.length}`);
+            console.log(`     Components: ${components.length}`);
             if (stack.dependencies && stack.dependencies.length > 0) {
                 console.log(`     Dependencies: ${stack.dependencies.join(', ')}`);
             }

@@ -7,19 +7,17 @@
     "Environment": "production",
     "ManagedBy": "pulumi"
   },
-  "stacks": [
-    {
-      "name": "shared-services-primary",
+  "stacks": {
+    "shared-services-primary": {
       "workDir": "./shared-services",
       "stackName": "shared-services-primary",
       "configFile": "Pulumi.shared-services-primary.yaml",
       "description": "Shared services in primary region (us-east-1)",
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
       "escEnvironments": ["namecheap-credentials", "cloudflare-credentials"],
-      "components": [
-        {
+      "components": {
+        "primary-ipam": {
           "type": "ipam",
-          "name": "primary-ipam",
           "config": {
             "region": "us-east-1",
             "ipamCidrBlocks": ["10.0.0.0/8"],
@@ -28,9 +26,8 @@
             "ipamVpcAllocationNetmask": 16
           }
         },
-        {
+        "primary-tgw": {
           "type": "transit-gateway",
-          "name": "primary-tgw",
           "config": {
             "region": "us-east-1",
             "asn": 64512,
@@ -48,25 +45,22 @@
           },
           "notes": "To add more routing groups (dev, test, staging), add them to routingGroups. Hub is automatic. Example: 'development': { 'allowedGroups': ['test'] }"
         },
-        {
+        "primary-hub-vpc": {
           "type": "hub-vpc",
-          "name": "primary-hub-vpc",
           "config": {
             "region": "us-east-1"
           },
           "notes": "CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask"
         },
-        {
+        "primary-shared-eks": {
           "type": "shared-eks",
-          "name": "primary-shared-eks",
           "config": {
             "region": "us-east-1",
             "clusterName": "shared-monitoring-cluster"
           }
         },
-        {
+        "primary-dns": {
           "type": "dns",
-          "name": "primary-dns",
           "config": {
             "region": "us-east-1",
             "baseDomain": "internal.srelog.dev",
@@ -76,9 +70,8 @@
           },
           "notes": "Creates private Route53 zone and ACM certificate. Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'"
         },
-        {
+        "primary-cloudflare-tunnel": {
           "type": "cloudflare-tunnel",
-          "name": "primary-cloudflare-tunnel",
           "config": {
             "region": "us-east-1",
             "enableCloudflareTunnel": true,
@@ -86,9 +79,8 @@
           },
           "notes": "Deploys cloudflared to provide secure access via WARP. Requires cloudflareTunnelToken in Pulumi ESC"
         },
-        {
+        "primary-observability": {
           "type": "observability",
-          "name": "primary-observability",
           "config": {
             "region": "us-east-1",
             "enableObservability": true,
@@ -110,15 +102,14 @@
           },
           "notes": "Deploys full observability stack: Loki (logs), Tempo (traces), Mimir (metrics), Grafana, and OTel Collector"
         }
-      ],
+      },
       "tags": {
         "Region": "us-east-1",
         "AccountType": "shared-services",
         "IsPrimary": "true"
       }
     },
-    {
-      "name": "shared-services-secondary",
+    "shared-services-secondary": {
       "workDir": "./shared-services",
       "stackName": "shared-services-secondary",
       "configFile": "Pulumi.shared-services-secondary.yaml",
@@ -126,10 +117,9 @@
       "dependencies": ["shared-services-primary"],
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
       "escEnvironments": ["namecheap-credentials", "cloudflare-credentials"],
-      "components": [
-        {
+      "components": {
+        "secondary-tgw": {
           "type": "transit-gateway",
-          "name": "secondary-tgw",
           "config": {
             "region": "us-west-2",
             "asn": 64513,
@@ -147,25 +137,22 @@
           },
           "notes": "To add more routing groups (dev, test, staging), add them to routingGroups. Hub is automatic. Example: 'development': { 'allowedGroups': ['test'] }"
         },
-        {
+        "secondary-hub-vpc": {
           "type": "hub-vpc",
-          "name": "secondary-hub-vpc",
           "config": {
             "region": "us-west-2"
           },
           "notes": "CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask"
         },
-        {
+        "secondary-shared-eks": {
           "type": "shared-eks",
-          "name": "secondary-shared-eks",
           "config": {
             "region": "us-west-2",
             "clusterName": "shared-monitoring-cluster-secondary"
           }
         },
-        {
+        "secondary-dns": {
           "type": "dns",
-          "name": "secondary-dns",
           "config": {
             "region": "us-west-2",
             "baseDomain": "internal.srelog.dev",
@@ -175,9 +162,8 @@
           },
           "notes": "Creates private Route53 zone and ACM certificate. Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'"
         },
-        {
+        "secondary-cloudflare-tunnel": {
           "type": "cloudflare-tunnel",
-          "name": "secondary-cloudflare-tunnel",
           "config": {
             "region": "us-west-2",
             "enableCloudflareTunnel": true,
@@ -185,9 +171,8 @@
           },
           "notes": "Deploys cloudflared to provide secure access via WARP. Uses same tunnel token as primary for multi-region redundancy"
         },
-        {
+        "secondary-observability": {
           "type": "observability",
-          "name": "secondary-observability",
           "config": {
             "region": "us-west-2",
             "enableObservability": true,
@@ -209,58 +194,52 @@
           },
           "notes": "Deploys full observability stack: Loki (logs), Tempo (traces), Mimir (metrics), Grafana, and OTel Collector"
         }
-      ],
+      },
       "tags": {
         "Region": "us-west-2",
         "AccountType": "shared-services",
         "IsPrimary": "false"
       }
     },
-    {
-      "name": "workloads-primary",
+    "workloads-primary": {
       "workDir": "./workloads",
       "stackName": "workloads-primary",
       "configFile": "Pulumi.workloads-primary.yaml",
       "description": "Workloads in primary region (us-east-1)",
       "dependencies": ["shared-services-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",
-      "components": [
-        {
+      "components": {
+        "primary-spoke-vpc": {
           "type": "spoke-vpc",
-          "name": "primary-spoke-vpc",
           "config": {
             "region": "us-east-1",
             "routingGroup": "production"
           },
           "notes": "CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask"
         },
-        {
+        "primary-workload-eks": {
           "type": "workload-eks",
-          "name": "primary-workload-eks",
           "config": {
             "region": "us-east-1",
             "clusterName": "workload-cluster"
           }
         },
-        {
+        "primary-rds-global": {
           "type": "rds-global",
-          "name": "primary-rds-global",
           "config": {
             "region": "us-east-1",
             "globalClusterIdentifier": "workload-global-db",
             "isPrimary": true
           }
         },
-        {
+        "route53-failover": {
           "type": "route53",
-          "name": "route53-failover",
           "config": {
             "hostedZone": "workloads.example.com"
           }
         },
-        {
+        "primary-observability-agent": {
           "type": "observability-agent",
-          "name": "primary-observability-agent",
           "config": {
             "region": "us-east-1",
             "enableOTelAgent": true,
@@ -268,51 +247,46 @@
           },
           "notes": "Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack"
         }
-      ],
+      },
       "tags": {
         "Region": "us-east-1",
         "AccountType": "workloads",
         "IsPrimary": "true"
       }
     },
-    {
-      "name": "workloads-secondary",
+    "workloads-secondary": {
       "workDir": "./workloads",
       "stackName": "workloads-secondary",
       "configFile": "Pulumi.workloads-secondary.yaml",
       "description": "Workloads in secondary region (us-west-2)",
       "dependencies": ["shared-services-secondary", "workloads-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",
-      "components": [
-        {
+      "components": {
+        "secondary-spoke-vpc": {
           "type": "spoke-vpc",
-          "name": "secondary-spoke-vpc",
           "config": {
             "region": "us-west-2",
             "routingGroup": "production"
           },
           "notes": "CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask"
         },
-        {
+        "secondary-workload-eks": {
           "type": "workload-eks",
-          "name": "secondary-workload-eks",
           "config": {
             "region": "us-west-2",
             "clusterName": "workload-cluster-secondary"
           }
         },
-        {
+        "secondary-rds-global": {
           "type": "rds-global",
-          "name": "secondary-rds-global",
           "config": {
             "region": "us-west-2",
             "globalClusterIdentifier": "workload-global-db",
             "isPrimary": false
           }
         },
-        {
+        "secondary-observability-agent": {
           "type": "observability-agent",
-          "name": "secondary-observability-agent",
           "config": {
             "region": "us-west-2",
             "enableOTelAgent": true,
@@ -320,14 +294,14 @@
           },
           "notes": "Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack"
         }
-      ],
+      },
       "tags": {
         "Region": "us-west-2",
         "AccountType": "workloads",
         "IsPrimary": "false"
       }
     }
-  ],
+  },
 
   "deploymentOptions": {
     "parallel": false,

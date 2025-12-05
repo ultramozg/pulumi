@@ -4,19 +4,20 @@
 
 export interface ComponentConfig {
     type: string;
-    name: string;
+    name?: string;
     config: Record<string, any>;
     region?: string;
+    notes?: string;
 }
 
 export interface StackConfig {
-    name: string;
+    name?: string;
     workDir: string;
     stackName?: string;
     configFile?: string;
     description?: string;
     dependencies?: string[];
-    components: ComponentConfig[];
+    components: ComponentConfig[] | Record<string, ComponentConfig>;
     tags?: Record<string, string>;
     roleArn?: string;
     escEnvironments?: string[];
@@ -27,7 +28,7 @@ export interface DeploymentConfig {
     description?: string;
     defaultRegion?: string;
     defaultTags?: Record<string, string>;
-    stacks: StackConfig[];
+    stacks: StackConfig[] | Record<string, StackConfig>;
     deploymentOptions?: {
         parallel?: boolean;
         continueOnFailure?: boolean;

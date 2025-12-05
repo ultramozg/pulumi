@@ -17,7 +17,9 @@ export class DependencyResolver {
         
         // Create a map for quick lookup
         stacks.forEach(stack => {
-            stackMap.set(stack.name, stack);
+            if (stack.name) {
+                stackMap.set(stack.name, stack);
+            }
         });
         
         // Validate all dependencies exist
@@ -33,7 +35,7 @@ export class DependencyResolver {
         // Create deployment groups
         const maxLevel = Math.max(...Object.values(levels));
         for (let level = 0; level <= maxLevel; level++) {
-            const group = stacks.filter(stack => levels[stack.name] === level);
+            const group = stacks.filter(stack => stack.name && levels[stack.name] === level);
             if (group.length > 0) {
                 deploymentGroups.push(group);
             }
@@ -58,7 +60,9 @@ export class DependencyResolver {
         const graph = new Map<string, string[]>();
         
         stacks.forEach(stack => {
-            graph.set(stack.name, stack.dependencies || []);
+            if (stack.name) {
+                graph.set(stack.name, stack.dependencies || []);
+            }
         });
         
         return graph;
@@ -124,7 +128,9 @@ export class DependencyResolver {
         };
         
         stacks.forEach(stack => {
-            calculateLevel(stack.name);
+            if (stack.name) {
+                calculateLevel(stack.name);
+            }
         });
         
         return levels;

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { DeploymentConfig, StackConfig } from './types';
+import { DeploymentConfig, StackConfig, ComponentConfig } from './types';
 
 /**
  * Configuration management for deployment specifications
@@ -85,46 +85,87 @@ export class ConfigManager {
         if (!config.name) {
             throw new Error('Deployment configuration must have a name');
         }
-        
-        if (!config.stacks || config.stacks.length === 0) {
+
+        // Normalize stacks to array for validation
+        const stacks = this.normalizeStacksToArray(config.stacks);
+
+        if (!stacks || stacks.length === 0) {
             throw new Error('Deployment configuration must have at least one stack');
         }
-        
+
         const stackNames = new Set<string>();
-        for (const stack of config.stacks) {
+        for (const stack of stacks) {
             if (!stack.name) {
                 throw new Error('Stack configuration must have a name');
             }
-            
+
             if (stackNames.has(stack.name)) {
                 throw new Error(`Duplicate stack name: ${stack.name}`);
             }
             stackNames.add(stack.name);
-            
+
             if (!stack.workDir) {
                 throw new Error(`Stack '${stack.name}' must have a workDir`);
             }
-            
-            if (!stack.components || stack.components.length === 0) {
+
+            // Normalize components to array for validation
+            const components = this.normalizeComponentsToArray(stack.components);
+
+            if (!components || components.length === 0) {
                 throw new Error(`Stack '${stack.name}' must have at least one component`);
             }
-            
-            for (const component of stack.components) {
+
+            for (const component of components) {
                 if (!component.type) {
                     throw new Error(`Component in stack '${stack.name}' must have a type`);
                 }
-                
+
                 if (!component.name) {
                     throw new Error(`Component in stack '${stack.name}' must have a name`);
                 }
             }
         }
     }
+
+    /**
+     * Normalize stacks from map or array to array format
+     * @param stacks Stacks as array or map
+     * @returns Stacks as array with names populated
+     */
+    private static normalizeStacksToArray(stacks: StackConfig[] | Record<string, StackConfig>): StackConfig[] {
+        if (Array.isArray(stacks)) {
+            return stacks;
+        }
+
+        return Object.entries(stacks).map(([name, stack]) => ({
+            ...stack,
+            name: stack.name || name
+        }));
+    }
+
+    /**
+     * Normalize components from map or array to array format
+     * @param components Components as array or map
+     * @returns Components as array with names populated
+     */
+    private static normalizeComponentsToArray(components: ComponentConfig[] | Record<string, ComponentConfig>): ComponentConfig[] {
+        if (Array.isArray(components)) {
+            return components;
+        }
+
+        return Object.entries(components).map(([name, component]) => ({
+            ...component,
+            name: component.name || name
+        }));
+    }
     
     private static normalizeConfig(config: DeploymentConfig): void {
+        // Normalize stacks to array if needed
+        const stacks = this.normalizeStacksToArray(config.stacks);
+
         // Apply default tags to stacks that don't have them
         if (config.defaultTags) {
-            config.stacks.forEach(stack => {
+            stacks.forEach(stack => {
                 if (!stack.tags) {
                     stack.tags = { ...config.defaultTags };
                 } else {
@@ -132,26 +173,83 @@ export class ConfigManager {
                 }
             });
         }
-        
+
         // Apply default region to components that don't have one
         if (config.defaultRegion) {
-            config.stacks.forEach(stack => {
-                stack.components.forEach(component => {
+            stacks.forEach(stack => {
+                const components = this.normalizeComponentsToArray(stack.components);
+                components.forEach(component => {
                     if (!component.region) {
                         component.region = config.defaultRegion;
                     }
                 });
+
+                // Update stack components if they were normalized
+                if (!Array.isArray(stack.components)) {
+                    const componentsMap: Record<string, ComponentConfig> = {};
+                    components.forEach(comp => {
+                        if (comp.name) {
+                            componentsMap[comp.name] = comp;
+                        }
+                    });
+                    stack.components = componentsMap;
+                } else {
+                    stack.components = components;
+                }
             });
         }
-        
+
         // Ensure workDir is absolute or relative to current directory
-        config.stacks.forEach(stack => {
+        stacks.forEach(stack => {
             if (!path.isAbsolute(stack.workDir)) {
                 stack.workDir = path.resolve(stack.workDir);
             }
         });
+
+        // Update config.stacks with normalized stacks if it was a map
+        if (!Array.isArray(config.stacks)) {
+            const stacksMap: Record<string, StackConfig> = {};
+            stacks.forEach(stack => {
+                if (stack.name) {
+                    stacksMap[stack.name] = stack;
+                }
+            });
+            config.stacks = stacksMap;
+        } else {
+            config.stacks = stacks;
+        }
     }
     
+    /**
+     * Get stacks as array (works with both map and array formats)
+     * @param config Deployment configuration
+     * @returns Stacks as array
+     */
+    public static getStacksArray(config: DeploymentConfig): StackConfig[] {
+        return this.normalizeStacksToArray(config.stacks);
+    }
+
+    /**
+     * Get components as array (works with both map and array formats)
+     * @param stack Stack configuration
+     * @returns Components as array
+     */
+    public static getComponentsArray(stack: StackConfig): ComponentConfig[] {
+        return this.normalizeComponentsToArray(stack.components);
+    }
+
+    /**
+     * Get stacks count (works with both map and array formats)
+     * @param stacks Stacks as array or map
+     * @returns Number of stacks
+     */
+    public static getStacksCount(stacks: StackConfig[] | Record<string, StackConfig>): number {
+        if (Array.isArray(stacks)) {
+            return stacks.length;
+        }
+        return Object.keys(stacks).length;
+    }
+
     /**
      * Substitute environment variables in configuration content
      * Supports ${VAR_NAME} and $VAR_NAME syntax

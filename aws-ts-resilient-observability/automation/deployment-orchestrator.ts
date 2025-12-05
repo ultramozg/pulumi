@@ -81,22 +81,23 @@ export class DeploymentOrchestrator {
         
         const monitor = PerformanceMonitor.start('deployment', this.logger);
         const results: DeploymentResult[] = [];
-        
-        this.logger.deploymentStart(config.stacks.length);
-        
+
+        const stacks = ConfigManager.getStacksArray(config);
+        this.logger.deploymentStart(stacks.length);
+
         try {
             // Validate configuration
             this.validateDeploymentConfig(config);
-            
+
             // Validate role access
             await this.validateRoleAccess(config);
-            
+
             // Resolve dependencies and create deployment groups
-            const deploymentGroups = await this.resolveDependenciesWithErrorHandling(config.stacks);
+            const deploymentGroups = await this.resolveDependenciesWithErrorHandling(stacks);
             
             this.logger.dependencyResolution(
-                deploymentGroups.length, 
-                deploymentGroups.map(group => group.map(s => s.name))
+                deploymentGroups.length,
+                deploymentGroups.map(group => group.map(s => s.name || 'unnamed'))
             );
             
             // Deploy each group in sequence, stacks within a group in parallel
@@ -110,9 +111,9 @@ export class DeploymentOrchestrator {
                 }
                 
                 this.logger.groupDeploymentStart(
-                    groupIndex, 
-                    deploymentGroups.length, 
-                    group.map(s => s.name)
+                    groupIndex,
+                    deploymentGroups.length,
+                    group.map(s => s.name || 'unnamed')
                 );
                 
                 const groupResults = await this.deployGroup(group, options, config);
@@ -159,7 +160,7 @@ export class DeploymentOrchestrator {
         const totalDuration = monitor.end();
         const summary: DeploymentSummary = {
             deploymentName: config.name,
-            totalStacks: config.stacks.length,
+            totalStacks: ConfigManager.getStacksCount(config.stacks),
             successfulStacks: results.filter(r => r.success).length,
             failedStacks: results.filter(r => !r.success).length,
             results,
@@ -196,10 +197,11 @@ export class DeploymentOrchestrator {
         const results: DeploymentResult[] = [];
         
         console.log(`🗑️  Starting destruction: ${config.name}`);
-        
+
         try {
             // Resolve dependencies and reverse the order for destruction
-            const deploymentGroups = this.dependencyResolver.resolveDependencies(config.stacks);
+            const stacks = ConfigManager.getStacksArray(config);
+            const deploymentGroups = this.dependencyResolver.resolveDependencies(stacks);
             const destructionGroups = deploymentGroups.reverse();
             
             // Destroy each group in sequence (reverse dependency order)
@@ -219,7 +221,7 @@ export class DeploymentOrchestrator {
         const endTime = Date.now();
         const summary: DeploymentSummary = {
             deploymentName: config.name,
-            totalStacks: config.stacks.length,
+            totalStacks: ConfigManager.getStacksCount(config.stacks),
             successfulStacks: results.filter(r => r.success).length,
             failedStacks: results.filter(r => !r.success).length,
             results,
@@ -295,22 +297,24 @@ export class DeploymentOrchestrator {
         deploymentConfig?: DeploymentConfig
     ): Promise<DeploymentResult> {
         const startTime = Date.now();
-        
+        const stackName = stackConfig.stackName || stackConfig.name || 'unnamed';
+
         try {
             // Show stack header
             if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
-                console.log(`\n📦 Deploying: ${stackConfig.name}`);
+                console.log(`\n📦 Deploying: ${stackName}`);
                 console.log(`🔐 Policy enforcement: enabled (advisory mode)`);
                 console.log(`${'─'.repeat(60)}`);
             }
-            
+
             // Extract region from stack config (from first component with a region, or use default)
-            const stackRegion = stackConfig.components?.find(c => c.region)?.region || deploymentConfig?.defaultRegion || 'us-east-1';
+            const components = ConfigManager.getComponentsArray(stackConfig);
+            const stackRegion = components?.find(c => c.region)?.region || deploymentConfig?.defaultRegion || 'us-east-1';
 
             // Assume role if roleArn is provided (BEFORE creating the stack workspace)
             let stackCredentials: { accessKeyId: string; secretAccessKey: string; sessionToken: string } | undefined;
             if (stackConfig.roleArn) {
-                stackCredentials = await this.assumeRole(stackConfig.roleArn, stackConfig.name);
+                stackCredentials = await this.assumeRole(stackConfig.roleArn, stackName);
             }
 
             // Build environment variables with stack-specific credentials
@@ -339,7 +343,7 @@ export class DeploymentOrchestrator {
             }
 
             const stack = await automation.LocalWorkspace.createOrSelectStack({
-                stackName: stackConfig.stackName || stackConfig.name,
+                stackName,
                 workDir: stackConfig.workDir
             }, {
                 // Pass stack-specific credentials to Pulumi process
@@ -354,9 +358,9 @@ export class DeploymentOrchestrator {
 
                     for (const envName of stackConfig.escEnvironments) {
                         if (!existingEnvironments.includes(envName)) {
-                            await workspace.addEnvironments(stackConfig.stackName || stackConfig.name, envName);
+                            await workspace.addEnvironments(stackName, envName);
                             if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
-                                console.log(`✅ ESC environment '${envName}' loaded for ${stackConfig.name}`);
+                                console.log(`✅ ESC environment '${envName}' loaded for ${stackName}`);
                             }
                         }
                     }
@@ -430,7 +434,7 @@ export class DeploymentOrchestrator {
                 if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
                     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
                     console.log(`${'─'.repeat(60)}`);
-                    console.log(`🔍 Preview completed: ${stackConfig.name} (${duration}s)`);
+                    console.log(`🔍 Preview completed: ${stackConfig.name || 'unnamed'} (${duration}s)`);
                 }
             } else {
                 if (options?.refresh) {
@@ -467,31 +471,31 @@ export class DeploymentOrchestrator {
                 if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
                     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
                     console.log(`${'─'.repeat(60)}`);
-                    console.log(`✅ Completed: ${stackConfig.name} (${duration}s)`);
+                    console.log(`✅ Completed: ${stackConfig.name || 'unnamed'} (${duration}s)`);
                 }
             }
             
             const endTime = Date.now();
             return {
-                stackName: stackConfig.name,
+                stackName,
                 success: true,
                 outputs,
                 previewSummary,
                 duration: endTime - startTime
             };
-            
+
         } catch (error) {
             const endTime = Date.now();
             // Show error with context
             if (!(process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID)) {
                 const duration = ((endTime - startTime) / 1000).toFixed(1);
                 console.log(`${'─'.repeat(60)}`);
-                console.log(`❌ Failed: ${stackConfig.name} (${duration}s)`);
+                console.log(`❌ Failed: ${stackName} (${duration}s)`);
                 console.log(`Error: ${error instanceof Error ? error.message : String(error)}`);
             }
-            
+
             return {
-                stackName: stackConfig.name,
+                stackName,
                 success: false,
                 error: error instanceof Error ? error.message : String(error),
                 duration: endTime - startTime
@@ -501,20 +505,22 @@ export class DeploymentOrchestrator {
     
     private async destroyStack(stackConfig: StackConfig): Promise<DeploymentResult> {
         const startTime = Date.now();
-        
+        const stackName = stackConfig.stackName || stackConfig.name || 'unnamed';
+
         try {
             // Show destruction header
-            console.log(`\n🗑️  Destroying: ${stackConfig.name}`);
+            console.log(`\n🗑️  Destroying: ${stackName}`);
             console.log(`${'─'.repeat(60)}`);
 
             // Extract region from stack config (from first component with a region, or use default)
-            const stackRegion = stackConfig.components?.find(c => c.region)?.region || 'us-east-1';
+            const components = ConfigManager.getComponentsArray(stackConfig);
+            const stackRegion = components?.find(c => c.region)?.region || 'us-east-1';
 
             // Assume role if roleArn is provided (BEFORE creating the stack workspace)
             // CRITICAL: This ensures correct credentials for cross-account destroy operations
             let stackCredentials: { accessKeyId: string; secretAccessKey: string; sessionToken: string } | undefined;
             if (stackConfig.roleArn) {
-                stackCredentials = await this.assumeRole(stackConfig.roleArn, stackConfig.name);
+                stackCredentials = await this.assumeRole(stackConfig.roleArn, stackName);
             }
 
             // Build environment variables with stack-specific credentials
@@ -543,7 +549,7 @@ export class DeploymentOrchestrator {
             }
 
             const stack = await automation.LocalWorkspace.createOrSelectStack({
-                stackName: stackConfig.stackName || stackConfig.name,
+                stackName,
                 workDir: stackConfig.workDir
             }, {
                 // Pass stack-specific credentials to Pulumi process
@@ -570,27 +576,27 @@ export class DeploymentOrchestrator {
                     }
                 }
             });
-            
+
             const duration = ((Date.now() - startTime) / 1000).toFixed(1);
             console.log(`${'─'.repeat(60)}`);
-            console.log(`✅ Destroyed: ${stackConfig.name} (${duration}s)`);
-            
+            console.log(`✅ Destroyed: ${stackName} (${duration}s)`);
+
             const endTime = Date.now();
             return {
-                stackName: stackConfig.name,
+                stackName,
                 success: true,
                 duration: endTime - startTime
             };
-            
+
         } catch (error) {
             const endTime = Date.now();
             const duration = ((endTime - startTime) / 1000).toFixed(1);
             console.log(`${'─'.repeat(60)}`);
-            console.log(`❌ Failed to destroy: ${stackConfig.name} (${duration}s)`);
+            console.log(`❌ Failed to destroy: ${stackName} (${duration}s)`);
             console.log(`Error: ${error instanceof Error ? error.message : String(error)}`);
-            
+
             return {
-                stackName: stackConfig.name,
+                stackName,
                 success: false,
                 error: error instanceof Error ? error.message : String(error),
                 duration: endTime - startTime
@@ -604,7 +610,8 @@ export class DeploymentOrchestrator {
     private async validateRoleAccess(config: DeploymentConfig): Promise<void> {
         // Collect unique role ARNs from stacks
         const roleArns = new Set<string>();
-        config.stacks.forEach(stack => {
+        const stacks = ConfigManager.getStacksArray(config);
+        stacks.forEach(stack => {
             if (stack.roleArn) {
                 roleArns.add(stack.roleArn);
             }
@@ -654,21 +661,20 @@ export class DeploymentOrchestrator {
         const namespace = this.extractNamespaceFromWorkDir(stackConfig.workDir);
         
         // Extract configuration from the stack's components in deployment config
-        if (stackConfig.components) {
-            stackConfig.components.forEach(component => {
-                if (component.config) {
-                    // Convert component config to Pulumi config format
-                    Object.entries(component.config).forEach(([key, value]) => {
-                        // Handle arrays and objects by JSON stringifying them
-                        if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
-                            configValues[`${namespace}:${key}`] = { value: JSON.stringify(value) };
-                        } else {
-                            configValues[`${namespace}:${key}`] = { value: String(value) };
-                        }
-                    });
-                }
-            });
-        }
+        const components = ConfigManager.getComponentsArray(stackConfig);
+        components.forEach(component => {
+            if (component.config) {
+                // Convert component config to Pulumi config format
+                Object.entries(component.config).forEach(([key, value]) => {
+                    // Handle arrays and objects by JSON stringifying them
+                    if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+                        configValues[`${namespace}:${key}`] = { value: JSON.stringify(value) };
+                    } else {
+                        configValues[`${namespace}:${key}`] = { value: String(value) };
+                    }
+                });
+            }
+        });
         
         // Set additional stack-level configuration
         configValues[`${namespace}:defaultRegion`] = { 
@@ -715,7 +721,8 @@ export class DeploymentOrchestrator {
             );
         }
 
-        if (!config.stacks || config.stacks.length === 0) {
+        const stacks = ConfigManager.getStacksArray(config);
+        if (!stacks || stacks.length === 0) {
             throw new ComponentError(
                 'DeploymentOrchestrator',
                 config.name,
@@ -725,7 +732,7 @@ export class DeploymentOrchestrator {
         }
 
         // Validate each stack configuration
-        config.stacks.forEach((stack, index) => {
+        stacks.forEach((stack, index) => {
             if (!stack.name || stack.name.trim().length === 0) {
                 throw new ComponentError(
                     'DeploymentOrchestrator',
@@ -816,19 +823,21 @@ export class DeploymentOrchestrator {
         totalGroups?: number,
         deploymentConfig?: DeploymentConfig
     ): Promise<DeploymentResult> {
+        const stackName = stackConfig.name || 'unnamed';
+
         if (this.metricsCollector) {
-            this.metricsCollector.startStack(stackConfig.name);
+            this.metricsCollector.startStack(stackName);
         }
 
-        this.logger?.stackDeploymentStart(stackConfig.name, groupIndex || 1, totalGroups || 1);
-        
+        this.logger?.stackDeploymentStart(stackName, groupIndex || 1, totalGroups || 1);
+
         return ErrorHandler.executeWithRecovery(
             async () => {
                 return this.deployStack(stackConfig, options, deploymentConfig);
             },
-            `deploy-stack-${stackConfig.name}`,
+            `deploy-stack-${stackName}`,
             'DeploymentOrchestrator',
-            stackConfig.name,
+            stackName,
             {
                 ...this.errorHandlingOptions,
                 skipCondition: (error: Error) => {
@@ -839,40 +848,43 @@ export class DeploymentOrchestrator {
                 }
             }
         ).then(result => {
+            const stackName = stackConfig.name || 'unnamed';
+
             if (this.metricsCollector) {
                 this.metricsCollector.completeStack(
-                    stackConfig.name, 
-                    result.success, 
+                    stackName,
+                    result.success,
                     result.error,
                     result.outputs ? Object.keys(result.outputs).length : 0
                 );
             }
 
             if (result.success) {
-                this.logger?.stackDeploymentSuccess(stackConfig.name, result.duration || 0, result.outputs);
+                this.logger?.stackDeploymentSuccess(stackName, result.duration || 0, result.outputs);
             } else {
                 this.logger?.stackDeploymentFailure(
-                    stackConfig.name, 
-                    new Error(result.error || 'Unknown error'), 
+                    stackName,
+                    new Error(result.error || 'Unknown error'),
                     result.duration || 0
                 );
             }
 
             return result;
         }).catch(error => {
+            const stackName = stackConfig.name || 'unnamed';
             const deploymentError = error instanceof Error ? error : new Error(String(error));
             const result: DeploymentResult = {
-                stackName: stackConfig.name,
+                stackName,
                 success: false,
                 error: deploymentError.message,
                 duration: 0
             };
 
             if (this.metricsCollector) {
-                this.metricsCollector.completeStack(stackConfig.name, false, deploymentError.message);
+                this.metricsCollector.completeStack(stackName, false, deploymentError.message);
             }
 
-            this.logger?.stackDeploymentFailure(stackConfig.name, deploymentError, 0);
+            this.logger?.stackDeploymentFailure(stackName, deploymentError, 0);
             return result;
         });
     }
