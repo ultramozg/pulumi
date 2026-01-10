@@ -1,0 +1,3 @@
+name: shared-services-apps
+runtime: nodejs
+main: index.ts

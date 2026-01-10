@@ -1,0 +1,67 @@
+environment:
+  - namecheap-credentials
+config:
+  aws:region: us-east-1
+  infra:accounttype: shared-services
+  infra:asn: "64512"
+  infra:baseDomain: internal.srelog.dev
+  infra:certificateValidationMethod: namecheap
+  infra:clusterName: shared-monitoring-cluster
+  infra:defaultRegion: us-east-1
+  infra:enableCertificates: "true"
+  infra:enableRouteTableIsolation: "true"
+  infra:environment: production
+  infra:ipamCidrBlocks: '["10.0.0.0/8"]'
+  infra:ipamOperatingRegions: '["us-east-1","us-west-2"]'
+  infra:ipamRegionalPoolNetmask: "12"
+  infra:ipamVpcAllocationNetmask: "16"
+  infra:isprimary: "true"
+  infra:managedby: pulumi
+  infra:parentDomain: srelog.dev
+  infra:project: resilient-observability
+  infra:region: us-east-1
+  infra:routingGroups: '{"production":{"description":"Production workloads","allowedGroups":[],"tags":{"Environment":"Production","Criticality":"Critical"}}}'
+  tags:AccountType: shared-services
+  tags:Environment: production
+  tags:IsPrimary: "true"
+  tags:ManagedBy: pulumi
+  tags:Project: resilient-observability
+  tags:Region: us-east-1
+  :accounttype: shared-services
+  :asn: "64512"
+  :baseDomain: internal.srelog.dev
+  :certificateValidationMethod: namecheap
+  :clusterName: shared-monitoring-cluster
+  :defaultRegion: us-east-1
+  :enableCertificates: "true"
+  :enableRouteTableIsolation: "true"
+  :environment: production
+  :ipamCidrBlocks: '["10.0.0.0/8"]'
+  :ipamOperatingRegions: '["us-east-1","us-west-2"]'
+  :ipamRegionalPoolNetmask: "12"
+  :ipamVpcAllocationNetmask: "16"
+  :isprimary: "true"
+  :managedby: pulumi
+  :parentDomain: srelog.dev
+  :project: resilient-observability
+  :region: us-east-1
+  :routingGroups: '{"production":{"description":"Production workloads","allowedGroups":[],"tags":{"Environment":"Production","Criticality":"Critical"}}}'
+  shared-services:accounttype: shared-services
+  shared-services:asn: "64512"
+  shared-services:baseDomain: internal.srelog.dev
+  shared-services:certificateValidationMethod: namecheap
+  shared-services:clusterName: shared-monitoring-cluster
+  shared-services:defaultRegion: us-east-1
+  shared-services:enableCertificates: "true"
+  shared-services:enableRouteTableIsolation: "true"
+  shared-services:environment: production
+  shared-services:ipamCidrBlocks: '["10.0.0.0/8"]'
+  shared-services:ipamOperatingRegions: '["us-east-1","us-west-2"]'
+  shared-services:ipamRegionalPoolNetmask: "12"
+  shared-services:ipamVpcAllocationNetmask: "16"
+  shared-services:isprimary: "true"
+  shared-services:managedby: pulumi
+  shared-services:parentDomain: srelog.dev
+  shared-services:project: resilient-observability
+  shared-services:region: us-east-1
+  shared-services:routingGroups: '{"production":{"description":"Production workloads","allowedGroups":[],"tags":{"Environment":"Production","Criticality":"Critical"}}}'

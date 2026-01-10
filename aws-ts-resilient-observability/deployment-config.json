@@ -8,13 +8,13 @@
     "ManagedBy": "pulumi"
   },
   "stacks": {
-    "shared-services-primary": {
-      "workDir": "./shared-services",
-      "stackName": "shared-services-primary",
-      "configFile": "Pulumi.shared-services-primary.yaml",
-      "description": "Shared services in primary region (us-east-1)",
+    "shared-services-infra-primary": {
+      "workDir": "./shared-services/infra",
+      "stackName": "shared-services-infra-primary",
+      "configFile": "Pulumi.shared-services-infra-primary.yaml",
+      "description": "Shared services infrastructure in primary region (us-east-1)",
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
-      "escEnvironments": ["namecheap-credentials", "cloudflare-credentials"],
+      "escEnvironments": ["namecheap-credentials"],
       "components": {
         "primary-ipam": {
           "type": "ipam",
@@ -69,38 +69,6 @@
             "certificateValidationMethod": "namecheap"
           },
           "notes": "Creates private Route53 zone and ACM certificate. Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'"
-        },
-        "primary-cloudflare-tunnel": {
-          "type": "cloudflare-tunnel",
-          "config": {
-            "region": "us-east-1",
-            "enableCloudflareTunnel": true,
-            "cloudflareTunnelReplicas": 2
-          },
-          "notes": "Deploys cloudflared to provide secure access via WARP. Requires cloudflareTunnelToken in Pulumi ESC"
-        },
-        "primary-observability": {
-          "type": "observability",
-          "config": {
-            "region": "us-east-1",
-            "enableObservability": true,
-            "loki": {
-              "enabled": true
-            },
-            "tempo": {
-              "enabled": true
-            },
-            "mimir": {
-              "enabled": true
-            },
-            "grafana": {
-              "enabled": true
-            },
-            "otelCollector": {
-              "enabled": true
-            }
-          },
-          "notes": "Deploys full observability stack: Loki (logs), Tempo (traces), Mimir (metrics), Grafana, and OTel Collector"
         }
       },
       "tags": {
@@ -109,14 +77,14 @@
         "IsPrimary": "true"
       }
     },
-    "shared-services-secondary": {
-      "workDir": "./shared-services",
-      "stackName": "shared-services-secondary",
-      "configFile": "Pulumi.shared-services-secondary.yaml",
-      "description": "Shared services in secondary region (us-west-2)",
-      "dependencies": ["shared-services-primary"],
+    "shared-services-infra-secondary": {
+      "workDir": "./shared-services/infra",
+      "stackName": "shared-services-infra-secondary",
+      "configFile": "Pulumi.shared-services-infra-secondary.yaml",
+      "description": "Shared services infrastructure in secondary region (us-west-2)",
+      "dependencies": ["shared-services-infra-primary"],
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
-      "escEnvironments": ["namecheap-credentials", "cloudflare-credentials"],
+      "escEnvironments": ["namecheap-credentials"],
       "components": {
         "secondary-tgw": {
           "type": "transit-gateway",
@@ -161,7 +129,71 @@
             "certificateValidationMethod": "namecheap"
           },
           "notes": "Creates private Route53 zone and ACM certificate. Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'"
+        }
+      },
+      "tags": {
+        "Region": "us-west-2",
+        "AccountType": "shared-services",
+        "IsPrimary": "false"
+      }
+    },
+    "shared-services-apps-primary": {
+      "workDir": "./shared-services/apps",
+      "stackName": "shared-services-apps-primary",
+      "configFile": "Pulumi.shared-services-apps-primary.yaml",
+      "description": "Shared services applications in primary region (us-east-1)",
+      "dependencies": ["shared-services-infra-primary"],
+      "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
+      "escEnvironments": ["cloudflare-credentials"],
+      "components": {
+        "primary-cloudflare-tunnel": {
+          "type": "cloudflare-tunnel",
+          "config": {
+            "region": "us-east-1",
+            "enableCloudflareTunnel": true,
+            "cloudflareTunnelReplicas": 2
+          },
+          "notes": "Deploys cloudflared to provide secure access via WARP. Requires cloudflareTunnelToken in Pulumi ESC"
         },
+        "primary-observability": {
+          "type": "observability",
+          "config": {
+            "region": "us-east-1",
+            "enableObservability": true,
+            "loki": {
+              "enabled": true
+            },
+            "tempo": {
+              "enabled": true
+            },
+            "mimir": {
+              "enabled": true
+            },
+            "grafana": {
+              "enabled": true
+            },
+            "otelCollector": {
+              "enabled": true
+            }
+          },
+          "notes": "Deploys full observability stack: Loki (logs), Tempo (traces), Mimir (metrics), Grafana, and OTel Collector"
+        }
+      },
+      "tags": {
+        "Region": "us-east-1",
+        "AccountType": "shared-services",
+        "IsPrimary": "true"
+      }
+    },
+    "shared-services-apps-secondary": {
+      "workDir": "./shared-services/apps",
+      "stackName": "shared-services-apps-secondary",
+      "configFile": "Pulumi.shared-services-apps-secondary.yaml",
+      "description": "Shared services applications in secondary region (us-west-2)",
+      "dependencies": ["shared-services-infra-secondary", "shared-services-apps-primary"],
+      "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
+      "escEnvironments": ["cloudflare-credentials"],
+      "components": {
         "secondary-cloudflare-tunnel": {
           "type": "cloudflare-tunnel",
           "config": {
@@ -206,7 +238,7 @@
       "stackName": "workloads-primary",
       "configFile": "Pulumi.workloads-primary.yaml",
       "description": "Workloads in primary region (us-east-1)",
-      "dependencies": ["shared-services-primary"],
+      "dependencies": ["shared-services-infra-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",
       "components": {
         "primary-spoke-vpc": {
@@ -259,7 +291,7 @@
       "stackName": "workloads-secondary",
       "configFile": "Pulumi.workloads-secondary.yaml",
       "description": "Workloads in secondary region (us-west-2)",
-      "dependencies": ["shared-services-secondary", "workloads-primary"],
+      "dependencies": ["shared-services-infra-secondary", "workloads-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",
       "components": {
         "secondary-spoke-vpc": {

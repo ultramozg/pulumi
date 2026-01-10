@@ -659,18 +659,19 @@ export class DeploymentOrchestrator {
         
         // Extract just the directory name from workDir, handling both relative and absolute paths
         const namespace = this.extractNamespaceFromWorkDir(stackConfig.workDir);
-        
+
         // Extract configuration from the stack's components in deployment config
         const components = ConfigManager.getComponentsArray(stackConfig);
         components.forEach(component => {
             if (component.config) {
                 // Convert component config to Pulumi config format
                 Object.entries(component.config).forEach(([key, value]) => {
+                    const configKey = `${namespace}:${key}`;
                     // Handle arrays and objects by JSON stringifying them
                     if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
-                        configValues[`${namespace}:${key}`] = { value: JSON.stringify(value) };
+                        configValues[configKey] = { value: JSON.stringify(value) };
                     } else {
-                        configValues[`${namespace}:${key}`] = { value: String(value) };
+                        configValues[configKey] = { value: String(value) };
                     }
                 });
             }
@@ -691,21 +692,33 @@ export class DeploymentOrchestrator {
 
     /**
      * Extract namespace from workDir, handling both relative and absolute paths
+     * For paths like "./shared-services/infra" or "./workloads", extracts the first directory after ./
+     * For absolute paths, finds the last two path segments and returns the first one
+     * Examples:
+     * - "./shared-services/infra" -> "shared-services"
+     * - "/path/to/project/shared-services/infra" -> "shared-services"
+     * - "./workloads" -> "workloads"
      */
     private extractNamespaceFromWorkDir(workDir: string): string {
-        // Handle relative paths like "./shared-services"
-        if (workDir.startsWith('./')) {
-            return workDir.replace(/^\.\//, '');
+        // Normalize the path by removing leading "./"
+        let normalizedPath = workDir.startsWith('./') ? workDir.replace(/^\.\//, '') : workDir;
+
+        // Split the path into segments
+        const parts = normalizedPath.split('/').filter(part => part.length > 0);
+
+        // For paths with at least 2 segments, extract the second-to-last segment
+        // This handles both "shared-services/infra" and "/full/path/shared-services/infra"
+        if (parts.length >= 2) {
+            return parts[parts.length - 2]; // e.g., "shared-services" from ["path", "to", "shared-services", "infra"]
         }
-        
-        // Handle absolute paths by extracting the last directory name
-        if (workDir.includes('/')) {
-            const parts = workDir.split('/');
-            return parts[parts.length - 1];
+
+        // For single-segment paths (like "workloads"), return the last segment
+        if (parts.length === 1) {
+            return parts[0];
         }
-        
-        // Handle simple directory names
-        return workDir;
+
+        // Fallback to empty string if path is invalid
+        return '';
     }
 
     /**
