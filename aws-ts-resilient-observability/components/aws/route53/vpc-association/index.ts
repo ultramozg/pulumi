@@ -114,10 +114,9 @@ export class Route53VpcAssociationComponent extends BaseAWSComponent implements 
 
                 const authorizationName = `${this.getResourceName()}-auth-${index}`;
 
-                // Create provider in the hosted zone's region
-                const authProvider = new aws.Provider(authorizationName, {
-                    region: spec.hostedZoneRegion
-                });
+                // Get provider for the hosted zone's region from registry
+                // This ensures we reuse providers and avoid creating duplicates
+                const authProvider = this.createProvider(spec.hostedZoneRegion);
 
                 // Create authorization in the hosted zone's region
                 const authorization = new aws.route53.VpcAssociationAuthorization(
