@@ -59,6 +59,7 @@ export interface BaseComponentArgs {
  * All AWS infrastructure components should extend this class
  */
 export abstract class BaseAWSComponent extends pulumi.ComponentResource {
+    protected readonly componentName: string;
     protected readonly region: string;
     protected readonly tags: { [key: string]: string };
     protected readonly logger: ComponentLogger;
@@ -72,6 +73,9 @@ export abstract class BaseAWSComponent extends pulumi.ComponentResource {
         opts?: pulumi.ComponentResourceOptions
     ) {
         super(type, name, {}, opts);
+
+        // Store component name for use in resource naming
+        this.componentName = name;
         
         // Initialize logger first
         this.logger = new ComponentLogger(type, name, {
@@ -317,9 +321,9 @@ export abstract class BaseAWSComponent extends pulumi.ComponentResource {
      * Get component name for error reporting
      */
     protected getResourceName(): string {
-        // Use the constructor name and a simple identifier instead of urn
-        // since urn is a Pulumi Output and can't be used synchronously
-        return `${this.constructor.name.toLowerCase()}-${this.region}`;
+        // Use the component name passed to constructor for consistent naming
+        // This ensures Pulumi resource names align with user-specified component names
+        return this.componentName;
     }
 
     /**

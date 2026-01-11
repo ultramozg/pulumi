@@ -1,7 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as tls from "@pulumi/tls";
-import { BaseAWSComponent, BaseComponentArgs, validateRequired, validateRegion } from "../../shared/base";
+import { BaseAWSComponent, BaseComponentArgs, validateRegion } from "../../shared/base";
 import { ComputeOutputs } from "../../shared/interfaces";
 import { generateEKSKubeconfig } from "../../shared/utils/kubernetes-helpers";
 
@@ -36,7 +36,7 @@ export interface EKSAutoModeConfig {
  * Arguments for EKS Component
  */
 export interface EKSComponentArgs extends BaseComponentArgs {
-    clusterName: string;
+    clusterName?: string;  // Optional - defaults to component name for naming consistency
     version?: string;
     autoMode?: EKSAutoModeConfig;
     addons?: string[];
@@ -116,8 +116,17 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
     ) {
         super("custom:aws:EKS", name, args, opts);
 
-        // Validate required arguments
-        validateRequired(args.clusterName, "clusterName", "EKSComponent");
+        // Default clusterName to component name for naming consistency
+        // This ensures Pulumi resource names match AWS resource names
+        const clusterName = args.clusterName || name;
+
+        // Warn if clusterName differs from component name
+        if (args.clusterName && args.clusterName !== name) {
+            pulumi.log.warn(
+                `EKS cluster name '${args.clusterName}' differs from component name '${name}'. ` +
+                `Consider using the same name for better consistency.`
+            );
+        }
 
         if (args.region) {
             validateRegion(args.region, "EKSComponent");
@@ -134,8 +143,8 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
             this.nodeRole = this.createNodeRole(args.autoMode?.enabled || false);
         }
 
-        // Create EKS cluster
-        this.cluster = this.createCluster(args);
+        // Create EKS cluster with resolved cluster name
+        this.cluster = this.createCluster({ ...args, clusterName });
 
         // Grant cluster admin access when using API authentication mode
         // This is required for kubectl to work when the cluster uses EKS Access Entries

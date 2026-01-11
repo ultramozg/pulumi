@@ -5,7 +5,8 @@ describe("EKSComponent", () => {
         const args: EKSComponentArgs = {
             clusterName: "test-cluster",
             region: "us-east-1",
-            subnetIds: ["subnet-12345", "subnet-67890"]
+            subnetIds: ["subnet-12345", "subnet-67890"],
+            adminRoleArn: "arn:aws:iam::123456789012:role/test-admin-role"
         };
 
         expect(() => {
@@ -13,17 +14,24 @@ describe("EKSComponent", () => {
         }).not.toThrow();
     });
 
-    it("should throw error for missing cluster name", () => {
+    it("should use component name as default cluster name", () => {
+        const args: EKSComponentArgs = {
+            region: "us-east-1",
+            subnetIds: ["subnet-12345", "subnet-67890"],
+            adminRoleArn: "arn:aws:iam::123456789012:role/test-admin-role"
+        };
+
         expect(() => {
-            new EKSComponent("test-error-eks", {} as EKSComponentArgs);
-        }).toThrow("EKSComponent: clusterName is required");
+            new EKSComponent("my-cluster-name", args);
+        }).not.toThrow();
     });
 
     it("should validate region format", () => {
         const args: EKSComponentArgs = {
             clusterName: "test-cluster",
             region: "invalid-region",
-            subnetIds: ["subnet-12345"]
+            subnetIds: ["subnet-12345"],
+            adminRoleArn: "arn:aws:iam::123456789012:role/test-admin-role"
         };
 
         expect(() => {
