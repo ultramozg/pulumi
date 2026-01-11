@@ -44,7 +44,7 @@ if (!isPrimary) {
     const org = pulumi.getOrganization();
     const project = pulumi.getProject();
     primaryStack = new pulumi.StackReference(`primary-stack-ref`, {
-        name: `${org}/${project}/shared-services-infra-primary`
+        name: `${org}/${project}/primary`
     });
     primaryRegion = config.require("primaryRegion");
 }

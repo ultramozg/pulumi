@@ -16,11 +16,10 @@ const isPrimary = config.get("isprimary") === "true";
 
 // Reference the infrastructure stack to get EKS cluster details
 const org = pulumi.getOrganization();
-const project = pulumi.getProject();
-const infraStackName = isPrimary ? "shared-services-infra-primary" : "shared-services-infra-secondary";
+const infraStackName = isPrimary ? "primary" : "secondary";
 
 const infraStack = new pulumi.StackReference(`infra-stack-ref`, {
-    name: `${org}/${project}/${infraStackName}`
+    name: `${org}/shared-services-infra/${infraStackName}`
 });
 
 // Import EKS cluster details from infrastructure stack

@@ -21,7 +21,11 @@ const rdsGlobalClusterIdentifier = config.require("rdsGlobalClusterIdentifier");
 const route53HostedZone = config.require("route53HostedZone");
 
 // Get shared services Transit Gateway ID, IPAM pool, routing configuration, and private hosted zone from stack reference
-const sharedServicesStackRef = new pulumi.StackReference(`shared-services-${currentRegion}`);
+const org = pulumi.getOrganization();
+const infraStackName = isPrimary ? "primary" : "secondary";
+const sharedServicesStackRef = new pulumi.StackReference(`shared-services-infra-ref`, {
+    name: `${org}/shared-services-infra/${infraStackName}`
+});
 const transitGatewayId = sharedServicesStackRef.getOutput("transitGatewayId");
 const transitGatewayIsolationEnabled = sharedServicesStackRef.getOutput("transitGatewayIsolationEnabled");
 const ipamPoolIds = sharedServicesStackRef.getOutput("ipamPoolIds");

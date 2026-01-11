@@ -1,0 +1,26 @@
+environment:
+  - namecheap-credentials
+config:
+  aws:region: us-west-2
+  infra:accounttype: shared-services
+  infra:asn: "64513"
+  infra:baseDomain: internal.srelog.dev
+  infra:certificateValidationMethod: namecheap
+  infra:clusterName: shared-monitoring-cluster-secondary
+  infra:defaultRegion: us-east-1
+  infra:enableCertificates: "true"
+  infra:enableRouteTableIsolation: "true"
+  infra:environment: production
+  infra:isprimary: "false"
+  infra:managedby: pulumi
+  infra:parentDomain: srelog.dev
+  infra:primaryRegion: us-east-1
+  infra:project: resilient-observability
+  infra:region: us-west-2
+  infra:routingGroups: '{"production":{"description":"Production workloads","allowedGroups":[],"tags":{"Environment":"Production","Criticality":"Critical"}}}'
+  tags:AccountType: shared-services
+  tags:Environment: production
+  tags:IsPrimary: "false"
+  tags:ManagedBy: pulumi
+  tags:Project: resilient-observability
+  tags:Region: us-west-2

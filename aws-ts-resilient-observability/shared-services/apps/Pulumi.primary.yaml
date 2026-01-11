@@ -1,0 +1,25 @@
+environment:
+  - cloudflare-credentials
+config:
+  aws:region: us-east-1
+  shared-services:accounttype: shared-services
+  shared-services:cloudflareTunnelReplicas: "2"
+  shared-services:defaultRegion: us-east-1
+  shared-services:enableCloudflareTunnel: "true"
+  shared-services:enableObservability: "true"
+  shared-services:environment: production
+  shared-services:grafana: '{"enabled":true}'
+  shared-services:isprimary: "true"
+  shared-services:loki: '{"enabled":true}'
+  shared-services:managedby: pulumi
+  shared-services:mimir: '{"enabled":true}'
+  shared-services:otelCollector: '{"enabled":true}'
+  shared-services:project: resilient-observability
+  shared-services:region: us-east-1
+  shared-services:tempo: '{"enabled":true}'
+  tags:AccountType: shared-services
+  tags:Environment: production
+  tags:IsPrimary: "true"
+  tags:ManagedBy: pulumi
+  tags:Project: resilient-observability
+  tags:Region: us-east-1
