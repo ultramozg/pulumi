@@ -24,3 +24,19 @@ config:
   tags:ManagedBy: pulumi
   tags:Project: resilient-observability
   tags:Region: us-west-2
+  shared-services:accounttype: shared-services
+  shared-services:asn: "64513"
+  shared-services:baseDomain: internal.srelog.dev
+  shared-services:certificateValidationMethod: namecheap
+  shared-services:clusterName: shared-monitoring-cluster-secondary
+  shared-services:defaultRegion: us-east-1
+  shared-services:enableCertificates: "true"
+  shared-services:enableRouteTableIsolation: "true"
+  shared-services:environment: production
+  shared-services:isprimary: "false"
+  shared-services:managedby: pulumi
+  shared-services:parentDomain: srelog.dev
+  shared-services:primaryRegion: us-east-1
+  shared-services:project: resilient-observability
+  shared-services:region: us-west-2
+  shared-services:routingGroups: '{"production":{"description":"Production workloads","allowedGroups":[],"tags":{"Environment":"Production","Criticality":"Critical"}}}'

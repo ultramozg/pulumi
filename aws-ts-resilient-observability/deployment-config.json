@@ -86,6 +86,13 @@
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
       "escEnvironments": ["namecheap-credentials"],
       "components": {
+        "stack-config": {
+          "type": "stack-level",
+          "config": {
+            "primaryRegion": "us-east-1"
+          },
+          "notes": "Stack-level configuration for secondary region, including primaryRegion for cross-region references"
+        },
         "secondary-tgw": {
           "type": "transit-gateway",
           "config": {
@@ -194,6 +201,13 @@
       "roleArn": "${SHARED_SERVICES_ROLE_ARN}",
       "escEnvironments": ["cloudflare-credentials"],
       "components": {
+        "stack-config": {
+          "type": "stack-level",
+          "config": {
+            "primaryRegion": "us-east-1"
+          },
+          "notes": "Stack-level configuration for secondary region"
+        },
         "secondary-cloudflare-tunnel": {
           "type": "cloudflare-tunnel",
           "config": {
@@ -294,6 +308,13 @@
       "dependencies": ["shared-services-infra-secondary", "workloads-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",
       "components": {
+        "stack-config": {
+          "type": "stack-level",
+          "config": {
+            "primaryRegion": "us-east-1"
+          },
+          "notes": "Stack-level configuration for secondary region"
+        },
         "secondary-spoke-vpc": {
           "type": "spoke-vpc",
           "config": {
