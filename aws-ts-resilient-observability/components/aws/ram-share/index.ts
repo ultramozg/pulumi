@@ -32,14 +32,10 @@ export class RAMShareComponent extends pulumi.ComponentResource {
         this.resourceAssociation = new aws.ram.ResourceAssociation(`${name}-resource-assoc`, {
             resourceArn: args.transitGatewayArn,
             resourceShareArn: this.resourceShare.arn
-        }, { 
+        }, {
             parent: this,
             dependsOn: [this.resourceShare],
             deleteBeforeReplace: true,
-            customTimeouts: {
-                create: "10m",
-                delete: "10m"
-            },
             // Ignore changes to resource ARN during updates to prevent recreation issues
             ignoreChanges: ["resourceArn"]
         });

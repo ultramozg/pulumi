@@ -888,11 +888,7 @@ export class VPCComponent extends BaseAWSComponent implements VPCComponentOutput
             },
             {
                 parent: this,
-                deleteBeforeReplace: true,
-                customTimeouts: {
-                    create: "10m",
-                    delete: "10m"
-                }
+                deleteBeforeReplace: true
             }
         );
         

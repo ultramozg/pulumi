@@ -477,11 +477,7 @@ export class TransitGateway extends pulumi.ComponentResource {
             },
             {
                 parent: this,
-                deleteBeforeReplace: true,
-                customTimeouts: {
-                    create: "10m",
-                    delete: "10m"
-                }
+                deleteBeforeReplace: true
             }
         );
 
@@ -506,11 +502,7 @@ export class TransitGateway extends pulumi.ComponentResource {
                 parent: this,
                 provider: peerProvider,
                 dependsOn: [peeringAttachment],
-                deleteBeforeReplace: true,
-                customTimeouts: {
-                    create: "10m",
-                    delete: "10m"
-                }
+                deleteBeforeReplace: true
             }
         );
 
