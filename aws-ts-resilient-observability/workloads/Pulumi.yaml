@@ -1,3 +1,0 @@
-name: workloads
-runtime: nodejs
-main: index.ts

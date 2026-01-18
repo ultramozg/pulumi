@@ -247,11 +247,11 @@
         "IsPrimary": "false"
       }
     },
-    "workloads-primary": {
-      "workDir": "./workloads",
+    "workloads-infra-primary": {
+      "workDir": "./workloads/infra",
       "stackName": "primary",
       "configFile": "Pulumi.primary.yaml",
-      "description": "Workloads in primary region (us-east-1)",
+      "description": "Workloads infrastructure in primary region (us-east-1)",
       "dependencies": ["shared-services-infra-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",
       "components": {
@@ -283,15 +283,6 @@
           "config": {
             "hostedZone": "workloads.example.com"
           }
-        },
-        "primary-observability-agent": {
-          "type": "observability-agent",
-          "config": {
-            "region": "us-east-1",
-            "enableOTelAgent": true,
-            "otelCollectorReplicas": 2
-          },
-          "notes": "Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack"
         }
       },
       "tags": {
@@ -300,12 +291,12 @@
         "IsPrimary": "true"
       }
     },
-    "workloads-secondary": {
-      "workDir": "./workloads",
+    "workloads-infra-secondary": {
+      "workDir": "./workloads/infra",
       "stackName": "secondary",
       "configFile": "Pulumi.secondary.yaml",
-      "description": "Workloads in secondary region (us-west-2)",
-      "dependencies": ["shared-services-infra-secondary", "workloads-primary"],
+      "description": "Workloads infrastructure in secondary region (us-west-2)",
+      "dependencies": ["shared-services-infra-secondary", "workloads-infra-primary"],
       "roleArn": "${WORKLOADS_ROLE_ARN}",
       "components": {
         "stack-config": {
@@ -337,6 +328,52 @@
             "globalClusterIdentifier": "workload-global-db",
             "isPrimary": false
           }
+        }
+      },
+      "tags": {
+        "Region": "us-west-2",
+        "AccountType": "workloads",
+        "IsPrimary": "false"
+      }
+    },
+    "workloads-apps-primary": {
+      "workDir": "./workloads/apps",
+      "stackName": "primary",
+      "configFile": "Pulumi.primary.yaml",
+      "description": "Workloads applications in primary region (us-east-1)",
+      "dependencies": ["workloads-infra-primary"],
+      "roleArn": "${WORKLOADS_ROLE_ARN}",
+      "components": {
+        "primary-observability-agent": {
+          "type": "observability-agent",
+          "config": {
+            "region": "us-east-1",
+            "enableOTelAgent": true,
+            "otelCollectorReplicas": 2
+          },
+          "notes": "Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack"
+        }
+      },
+      "tags": {
+        "Region": "us-east-1",
+        "AccountType": "workloads",
+        "IsPrimary": "true"
+      }
+    },
+    "workloads-apps-secondary": {
+      "workDir": "./workloads/apps",
+      "stackName": "secondary",
+      "configFile": "Pulumi.secondary.yaml",
+      "description": "Workloads applications in secondary region (us-west-2)",
+      "dependencies": ["workloads-infra-secondary", "workloads-apps-primary"],
+      "roleArn": "${WORKLOADS_ROLE_ARN}",
+      "components": {
+        "stack-config": {
+          "type": "stack-level",
+          "config": {
+            "primaryRegion": "us-east-1"
+          },
+          "notes": "Stack-level configuration for secondary region"
         },
         "secondary-observability-agent": {
           "type": "observability-agent",
