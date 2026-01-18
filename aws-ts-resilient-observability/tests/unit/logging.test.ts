@@ -5,7 +5,7 @@ import {
     PerformanceMonitor,
     MetricsCollector,
     LogLevel
-} from "../components/shared/utils/logging';
+} from "../../components/shared/utils/logging";
 
 // Mock Pulumi logging
 jest.mock('@pulumi/pulumi', () => ({

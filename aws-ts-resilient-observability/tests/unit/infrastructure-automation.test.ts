@@ -1,5 +1,6 @@
 import { InfrastructureAutomation } from '../../index';
-import { RecoveryStrategy } from "../components/shared/utils/error-handling';
+import { RecoveryStrategy } from "../../components/shared/utils/error-handling";
+import { StackConfig, ComponentConfig } from "../../automation/types";
 
 describe('InfrastructureAutomation', () => {
     let automation: InfrastructureAutomation;
@@ -24,17 +25,20 @@ describe('InfrastructureAutomation', () => {
             expect(config.name).toBe('test-deployment');
             expect(config.defaultRegion).toBe('us-east-1');
             expect(config.defaultTags).toEqual({ Environment: 'test' });
-            expect(config.stacks.length).toBeGreaterThan(0);
+
+            const stacksArray = Array.isArray(config.stacks) ? config.stacks : Object.values(config.stacks);
+            expect(stacksArray.length).toBeGreaterThan(0);
 
             // Check that all stacks have the expected structure
-            config.stacks.forEach(stack => {
+            stacksArray.forEach((stack: StackConfig) => {
                 expect(stack.name).toMatch(/-stack$/);
                 expect(stack.workDir).toMatch(/^\.\/examples\/.+-example$/);
-                expect(stack.components).toHaveLength(1);
-                expect(stack.components[0].type).toBeTruthy();
-                expect(stack.components[0].name).toBeTruthy();
-                expect(stack.components[0].config).toBeTruthy();
-                expect(stack.tags).toEqual({ Environment: 'test', Component: stack.components[0].type });
+                const components = Array.isArray(stack.components) ? stack.components : Object.values(stack.components);
+                expect(components).toHaveLength(1);
+                expect(components[0].type).toBeTruthy();
+                expect(components[0].name).toBeTruthy();
+                expect(components[0].config).toBeTruthy();
+                expect(stack.tags).toEqual({ Environment: 'test', Component: components[0].type });
             });
         });
 
@@ -44,15 +48,18 @@ describe('InfrastructureAutomation', () => {
                 includeComponents: ['vpc', 'ecr']
             });
 
-            expect(config.stacks).toHaveLength(2);
-            
-            const vpcStack = config.stacks.find(s => s.name.includes('vpc'));
-            const ecrStack = config.stacks.find(s => s.name.includes('ecr'));
+            const stacksArray = Array.isArray(config.stacks) ? config.stacks : Object.values(config.stacks);
+            expect(stacksArray).toHaveLength(2);
+
+            const vpcStack = stacksArray.find((s: StackConfig) => s.name?.includes('vpc'));
+            const ecrStack = stacksArray.find((s: StackConfig) => s.name?.includes('ecr'));
 
             expect(vpcStack).toBeDefined();
             expect(ecrStack).toBeDefined();
-            expect(vpcStack!.components[0].type).toBe('vpc');
-            expect(ecrStack!.components[0].type).toBe('ecr');
+            const vpcComps = Array.isArray(vpcStack!.components) ? vpcStack!.components : Object.values(vpcStack!.components);
+            const ecrComps = Array.isArray(ecrStack!.components) ? ecrStack!.components : Object.values(ecrStack!.components);
+            expect(vpcComps[0].type).toBe('vpc');
+            expect(ecrComps[0].type).toBe('ecr');
         });
 
         test('should create configuration excluding specific components', () => {
@@ -61,7 +68,11 @@ describe('InfrastructureAutomation', () => {
                 excludeComponents: ['rds', 'eks']
             });
 
-            const componentTypes = config.stacks.map(s => s.components[0].type);
+            const stacksArray = Array.isArray(config.stacks) ? config.stacks : Object.values(config.stacks);
+            const componentTypes = stacksArray.map((s: StackConfig) => {
+                const comps = Array.isArray(s.components) ? s.components : Object.values(s.components);
+                return comps[0].type;
+            });
             expect(componentTypes).not.toContain('rds');
             expect(componentTypes).not.toContain('eks');
             expect(componentTypes).toContain('vpc');
@@ -73,14 +84,22 @@ describe('InfrastructureAutomation', () => {
                 region: 'us-east-1'
             });
 
-            const vpcStack = config.stacks.find(s => s.components[0].type === 'vpc');
-            const ecrStack = config.stacks.find(s => s.components[0].type === 'ecr');
+            const stacksArray = Array.isArray(config.stacks) ? config.stacks : Object.values(config.stacks);
+            const vpcStack = stacksArray.find((s: StackConfig) => {
+                const comps = Array.isArray(s.components) ? s.components : Object.values(s.components);
+                return comps[0]?.type === 'vpc';
+            });
+            const ecrStack = stacksArray.find((s: StackConfig) => {
+                const comps = Array.isArray(s.components) ? s.components : Object.values(s.components);
+                return comps[0]?.type === 'ecr';
+            });
 
             expect(vpcStack).toBeDefined();
             expect(ecrStack).toBeDefined();
 
             // Check VPC default configuration
-            const vpcConfig = vpcStack!.components[0].config;
+            const vpcComponents = Array.isArray(vpcStack!.components) ? vpcStack!.components : Object.values(vpcStack!.components);
+            const vpcConfig = vpcComponents[0].config;
             expect(vpcConfig.region).toBe('us-east-1');
             expect(vpcConfig.cidrBlock).toBe('10.0.0.0/16');
             expect(vpcConfig.internetGatewayEnabled).toBe(true);
@@ -88,7 +107,8 @@ describe('InfrastructureAutomation', () => {
             expect(vpcConfig.availabilityZoneCount).toBe(2);
 
             // Check ECR default configuration
-            const ecrConfig = ecrStack!.components[0].config;
+            const ecrComponents = Array.isArray(ecrStack!.components) ? ecrStack!.components : Object.values(ecrStack!.components);
+            const ecrConfig = ecrComponents[0].config;
             expect(ecrConfig.repositories).toHaveLength(1);
             expect(ecrConfig.repositories[0].name).toBe('default-repo');
             expect(ecrConfig.repositories[0].shareWithOrganization).toBe(false);

@@ -1,5 +1,5 @@
 import * as pulumi from "@pulumi/pulumi";
-import { ACMComponent, ACMComponentArgs, CertificateSpec } from "./index";
+import { AcmCertificateComponent, AcmCertificateArgs } from "./index";
 
 // Mock Pulumi runtime
 pulumi.runtime.setMocks({
@@ -53,7 +53,7 @@ pulumi.runtime.setMocks({
     }
 });
 
-describe("ACMComponent", () => {
+describe("AcmCertificateComponent", () => {
     it("placeholder test", () => {
         // Placeholder test to satisfy Jest requirement
         expect(true).toBe(true);

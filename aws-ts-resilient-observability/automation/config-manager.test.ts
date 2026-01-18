@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigManager } from './config-manager';
-import { DeploymentConfig, StackConfig } from './types';
+import { DeploymentConfig, StackConfig, ComponentConfig } from './types';
 
 // Mock fs module
 jest.mock('fs');
@@ -36,8 +36,9 @@ describe('ConfigManager', () => {
             expect(config.name).toBe('test-deployment');
             expect(config.defaultRegion).toBe('us-east-1');
             expect(config.defaultTags).toEqual({ Environment: 'test' });
-            expect(config.stacks).toHaveLength(1);
-            expect(config.stacks[0].name).toBe('test-stack');
+            expect(Array.isArray(config.stacks)).toBe(true);
+            expect((config.stacks as StackConfig[])).toHaveLength(1);
+            expect((config.stacks as StackConfig[])[0].name).toBe('test-stack');
         });
         
         it('should apply default tags to stacks', () => {
@@ -53,7 +54,7 @@ describe('ConfigManager', () => {
                 defaultTags: { Environment: 'test', Project: 'test-project' }
             });
             
-            expect(config.stacks[0].tags).toEqual({
+            expect((config.stacks as StackConfig[])[0].tags).toEqual({
                 Environment: 'test',
                 Project: 'test-project'
             });
@@ -73,7 +74,7 @@ describe('ConfigManager', () => {
                 defaultTags: { Environment: 'test', Project: 'test-project' }
             });
             
-            expect(config.stacks[0].tags).toEqual({
+            expect((config.stacks as StackConfig[])[0].tags).toEqual({
                 Environment: 'test',
                 Project: 'test-project',
                 Layer: 'networking'
@@ -96,8 +97,10 @@ describe('ConfigManager', () => {
                 defaultRegion: 'us-east-1'
             });
             
-            expect(config.stacks[0].components[0].region).toBe('us-east-1');
-            expect(config.stacks[0].components[1].region).toBe('us-west-2'); // Should not override existing region
+            const stacksArray = config.stacks as StackConfig[];
+            const components = stacksArray[0].components as ComponentConfig[];
+            expect(components[0].region).toBe('us-east-1');
+            expect(components[1].region).toBe('us-west-2'); // Should not override existing region
         });
     });
     
@@ -223,9 +226,11 @@ stacks:
             
             expect(config.name).toBe('test-deployment');
             expect(config.defaultRegion).toBe('us-east-1');
-            expect(config.stacks).toHaveLength(1);
-            expect(config.stacks[0].name).toBe('test-stack');
-            expect(config.stacks[0].components[0].type).toBe('vpc');
+            const stacksArray = config.stacks as StackConfig[];
+            expect(stacksArray).toHaveLength(1);
+            expect(stacksArray[0].name).toBe('test-stack');
+            const components = stacksArray[0].components as ComponentConfig[];
+            expect(components[0].type).toBe('vpc');
         });
         
         it('should throw error for invalid file path', () => {

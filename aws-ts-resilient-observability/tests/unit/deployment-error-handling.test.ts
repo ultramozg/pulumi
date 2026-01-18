@@ -1,7 +1,7 @@
 import * as automation from "@pulumi/pulumi/automation";
 import { DeploymentOrchestrator } from '../../automation/deployment-orchestrator';
 import { DeploymentConfig, StackConfig } from '../../automation/types';
-import { ComponentError, RecoveryStrategy } from "../components/shared/utils/error-handling';
+import { ComponentError, RecoveryStrategy } from "../../components/shared/utils/error-handling";
 import { fail } from "assert";
 
 // Mock Pulumi automation

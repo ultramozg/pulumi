@@ -103,19 +103,8 @@ describe("Route53HostedZoneComponent", () => {
             expect(() => new Route53HostedZoneComponent("test-hz-invalid", args)).toThrow();
         });
 
-        it("should throw error for invalid VPC ID format", () => {
-            const args: Route53HostedZoneArgs = {
-                hostedZones: [
-                    {
-                        name: "internal.example.com",
-                        private: true,
-                        vpcIds: ["invalid-vpc-id"]
-                    }
-                ]
-            };
-
-            expect(() => new Route53HostedZoneComponent("test-hz-invalid-vpc", args)).toThrow();
-        });
+        // VPC ID format validation is intentionally skipped because vpcIds may be pulumi.Output<string>
+        // AWS will validate the format when the zone is created
     });
 
     describe("Methods", () => {

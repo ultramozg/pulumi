@@ -10,7 +10,7 @@ import {
     NetworkingStackConfig,
     ApplicationStackConfig,
     DNSCertificateConfig
-} from "../components/shared/utils/composition";
+} from "../../components/shared/utils/composition";
 import {
     validateComponentCompatibility,
     validateComponentComposition,
@@ -18,7 +18,7 @@ import {
     validateSubnetConfiguration,
     ComponentConfig,
     CompatibilityRule
-} from "../components/shared/utils/validation";
+} from "../../components/shared/utils/validation";
 import {
     OutputRegistry,
     shareVPCOutputs,
@@ -27,7 +27,7 @@ import {
     shareRDSOutputs,
     shareDNSCertificateOutputs,
     CrossStackOutputManager
-} from "../components/shared/utils/output-sharing";
+} from "../../components/shared/utils/output-sharing";
 
 // Mock Pulumi runtime for testing
 pulumi.runtime.setMocks({
