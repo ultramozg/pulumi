@@ -1,0 +1,44 @@
+config:
+  tags:AccountType: shared-services
+  tags:Environment: production
+  tags:IsPrimary: "true"
+  tags:ManagedBy: pulumi
+  tags:Project: resilient-observability
+  tags:Region: us-east-1
+  aws:region: us-east-1
+  shared-services:eksClusterName: shared-monitoring-cluster
+  shared-services:hubVpcCidr: 10.0.0.0/16
+  shared-services:isPrimary: "true"
+  shared-services:primaryRegion: us-east-1
+  shared-services:secondaryRegion: us-west-2
+  shared-services:accounttype: shared-services
+  shared-services:asn: "64512"
+  shared-services:cidrBlock: 10.0.0.0/16
+  shared-services:clusterName: shared-monitoring-cluster
+  shared-services:defaultRegion: us-east-1
+  shared-services:environment: production
+  shared-services:isprimary: "true"
+  shared-services:managedby: pulumi
+  shared-services:project: resilient-observability
+  shared-services:region: us-east-1
+  shared-services:ipamCidrBlocks: '["10.0.0.0/8"]'
+  shared-services:ipamOperatingRegions: '["us-east-1","us-west-2"]'
+  shared-services:ipamRegionalPoolNetmask: "12"
+  shared-services:ipamVpcAllocationNetmask: "16"
+  shared-services:enableRouteTableIsolation: "true"
+  shared-services:routingGroups: '{"production":{"description":"Production workloads","allowedGroups":[],"tags":{"Environment":"Production","Criticality":"Critical"}}}'
+  shared-services:baseDomain: internal.srelog.dev
+  shared-services:certificateValidationMethod: namecheap
+  shared-services:enableCertificates: "true"
+  shared-services:parentDomain: srelog.dev
+  shared-services:cloudflareTunnelReplicas: "2"
+  shared-services:enableCloudflareTunnel: "true"
+  shared-services:enableObservability: "true"
+  shared-services:grafana: '{"enabled":true}'
+  shared-services:loki: '{"enabled":true}'
+  shared-services:mimir: '{"enabled":true}'
+  shared-services:otelCollector: '{"enabled":true}'
+  shared-services:tempo: '{"enabled":true}'
+environment:
+  - namecheap-credentials
+  - cloudflare-credentials

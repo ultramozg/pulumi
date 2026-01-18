@@ -1,0 +1,7 @@
+name: shared-services
+runtime: nodejs
+main: index.ts
+
+# Import Namecheap credentials from Pulumi ESC
+environment:
+  - namecheap-credentials
