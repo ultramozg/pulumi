@@ -1,0 +1,101 @@
+# Loki configuration for local development
+# Using single binary mode for simplicity
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  storage:
+    type: 'filesystem'
+
+  schemaConfig:
+    configs:
+      - from: 2024-01-01
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  limits_config:
+    retention_period: 168h  # 7 days
+    max_query_series: 10000
+    max_query_lookback: 168h
+
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
+# Disable other deployment modes
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+backend:
+  replicas: 0
+
+singleBinary:
+  replicas: 1
+
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  extraEnv:
+    - name: JAEGER_AGENT_HOST
+      value: tempo-distributor.tempo.svc.cluster.local
+    - name: JAEGER_AGENT_PORT
+      value: "6831"
+
+# Gateway for ingress
+gateway:
+  enabled: true
+  replicas: 1
+
+  service:
+    type: NodePort
+    nodePort: 30100
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# Monitoring
+monitoring:
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+
+  serviceMonitor:
+    enabled: false
+
+  rules:
+    enabled: false
+
+  lokiCanary:
+    enabled: false
+
+# Test pod
+test:
+  enabled: false

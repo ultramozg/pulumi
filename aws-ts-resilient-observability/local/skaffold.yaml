@@ -1,0 +1,199 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: resilient-observability
+
+# Build configuration (if you have custom images)
+build:
+  artifacts: []
+  # If you build custom images, add them here
+  # - image: my-custom-app
+  #   context: ../apps/my-app
+  #   docker:
+  #     dockerfile: Dockerfile
+
+# Deploy configuration using Helm
+deploy:
+  helm:
+    releases:
+    # Loki - Log aggregation
+    - name: loki
+      repo: https://grafana.github.io/helm-charts
+      remoteChart: loki
+      namespace: loki
+      createNamespace: true
+      valuesFiles:
+        - helm/loki-values.yaml
+      wait: true
+      upgradeOnChange: true
+
+    # Tempo - Distributed tracing
+    - name: tempo
+      repo: https://grafana.github.io/helm-charts
+      remoteChart: tempo-distributed
+      namespace: tempo
+      createNamespace: true
+      valuesFiles:
+        - helm/tempo-values.yaml
+      wait: true
+      upgradeOnChange: true
+
+    # Mimir - Metrics storage
+    - name: mimir
+      repo: https://grafana.github.io/helm-charts
+      remoteChart: mimir-distributed
+      namespace: mimir
+      createNamespace: true
+      valuesFiles:
+        - helm/mimir-values.yaml
+      wait: true
+      upgradeOnChange: true
+
+    # OpenTelemetry Collector
+    - name: opentelemetry-collector
+      repo: https://open-telemetry.github.io/opentelemetry-helm-charts
+      remoteChart: opentelemetry-collector
+      namespace: opentelemetry
+      createNamespace: true
+      valuesFiles:
+        - helm/otel-collector-values.yaml
+      wait: true
+      upgradeOnChange: true
+
+    # Grafana - Visualization (deployed last)
+    - name: grafana
+      repo: https://grafana.github.io/helm-charts
+      remoteChart: grafana
+      namespace: grafana
+      createNamespace: true
+      valuesFiles:
+        - helm/grafana-values.yaml
+      wait: true
+      upgradeOnChange: true
+
+# Port forwarding for local access
+portForward:
+  - resourceType: service
+    resourceName: grafana
+    namespace: grafana
+    port: 80
+    localPort: 3000
+
+  - resourceType: service
+    resourceName: loki-gateway
+    namespace: loki
+    port: 80
+    localPort: 3100
+
+  - resourceType: service
+    resourceName: tempo-query-frontend
+    namespace: tempo
+    port: 3200
+    localPort: 3200
+
+  - resourceType: service
+    resourceName: mimir-query-frontend
+    namespace: mimir
+    port: 8080
+    localPort: 9009
+
+  - resourceType: service
+    resourceName: opentelemetry-collector
+    namespace: opentelemetry
+    port: 4317
+    localPort: 4317
+
+  - resourceType: service
+    resourceName: opentelemetry-collector
+    namespace: opentelemetry
+    port: 4318
+    localPort: 4318
+
+# Profiles for different scenarios
+profiles:
+  # Minimal profile - just Grafana + Loki
+  - name: minimal
+    deploy:
+      helm:
+        releases:
+        - name: loki
+          repo: https://grafana.github.io/helm-charts
+          remoteChart: loki
+          namespace: loki
+          createNamespace: true
+          valuesFiles:
+            - helm/loki-values.yaml
+
+        - name: grafana
+          repo: https://grafana.github.io/helm-charts
+          remoteChart: grafana
+          namespace: grafana
+          createNamespace: true
+          valuesFiles:
+            - helm/grafana-values.yaml
+
+    portForward:
+      - resourceType: service
+        resourceName: grafana
+        namespace: grafana
+        port: 80
+        localPort: 3000
+
+      - resourceType: service
+        resourceName: loki-gateway
+        namespace: loki
+        port: 80
+        localPort: 3100
+
+  # Development profile - with sample app
+  - name: dev
+    manifests:
+      rawYaml:
+        - manifests/sample-app.yaml
+
+    portForward:
+      - resourceType: service
+        resourceName: grafana
+        namespace: grafana
+        port: 80
+        localPort: 3000
+
+      - resourceType: service
+        resourceName: loki-gateway
+        namespace: loki
+        port: 80
+        localPort: 3100
+
+      - resourceType: service
+        resourceName: tempo-query-frontend
+        namespace: tempo
+        port: 3200
+        localPort: 3200
+
+      - resourceType: service
+        resourceName: mimir-query-frontend
+        namespace: mimir
+        port: 8080
+        localPort: 9009
+
+      - resourceType: service
+        resourceName: sample-app
+        namespace: sample-app
+        port: 80
+        localPort: 8080
+
+# Verify deployments
+verify:
+  - name: loki-ready
+    container:
+      name: loki-check
+      image: curlimages/curl:latest
+      command: ["curl"]
+      args: ["-f", "http://loki-gateway.loki.svc.cluster.local/ready"]
+
+  - name: grafana-ready
+    container:
+      name: grafana-check
+      image: curlimages/curl:latest
+      command: ["curl"]
+      args: ["-f", "http://grafana.grafana.svc.cluster.local/api/health"]

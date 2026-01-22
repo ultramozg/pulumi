@@ -1,0 +1,119 @@
+# Tempo configuration for local development
+# Using distributed mode to mirror production setup
+
+# Global settings
+tempo:
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://mimir-distributor.mimir.svc.cluster.local:8080/api/v1/push
+
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+
+  retention: 48h  # 2 days retention for local dev
+
+  searchEnabled: true
+
+# Distributor
+distributor:
+  replicas: 1
+
+  service:
+    type: ClusterIP
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# Ingester
+ingester:
+  replicas: 1
+
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Compactor
+compactor:
+  replicas: 1
+
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# Querier
+querier:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# Query Frontend
+queryFrontend:
+  replicas: 1
+
+  service:
+    type: NodePort
+    nodePort: 30200
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# Metrics generator (for RED metrics)
+metricsGenerator:
+  replicas: 1
+  enabled: true
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# Gateway (optional)
+gateway:
+  enabled: false
+
+# Service monitors
+serviceMonitor:
+  enabled: false
+
+prometheusRule:
+  enabled: false

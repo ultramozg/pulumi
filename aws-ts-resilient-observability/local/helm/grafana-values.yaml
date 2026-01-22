@@ -1,0 +1,221 @@
+# Grafana configuration for local development
+
+replicas: 1
+
+# Admin credentials
+adminUser: admin
+adminPassword: admin123
+
+# Disable secret leak validation for local development
+assertNoLeakedSecrets: false
+
+# Service configuration
+service:
+  type: NodePort
+  nodePort: 30080
+  port: 80
+  targetPort: 3000
+
+# Persistence
+persistence:
+  enabled: true
+  type: pvc
+  storageClassName: standard
+  size: 5Gi
+
+# Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Datasources
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    # Prometheus/Mimir datasource
+    - name: Prometheus
+      type: prometheus
+      url: http://mimir-query-frontend.mimir.svc.cluster.local:8080/prometheus
+      access: proxy
+      isDefault: true
+      jsonData:
+        timeInterval: 30s
+        queryTimeout: 60s
+      editable: true
+
+    # Loki datasource
+    - name: Loki
+      type: loki
+      url: http://loki-gateway.loki.svc.cluster.local
+      access: proxy
+      jsonData:
+        maxLines: 1000
+        derivedFields:
+          # Trace ID field for correlation
+          - datasourceUid: tempo
+            matcherRegex: "trace_id=(\\w+)"
+            name: TraceID
+            url: "$${__value.raw}"
+      editable: true
+
+    # Tempo datasource
+    - name: Tempo
+      type: tempo
+      url: http://tempo-query-frontend.tempo.svc.cluster.local:3200
+      access: proxy
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: '-1h'
+          spanEndTimeShift: '1h'
+          filterByTraceID: true
+          filterBySpanID: false
+          tags:
+            - key: service.name
+              value: service_name
+        tracesToMetrics:
+          datasourceUid: prometheus
+          spanStartTimeShift: '-1h'
+          spanEndTimeShift: '1h'
+          tags:
+            - key: service.name
+              value: service_name
+        serviceMap:
+          datasourceUid: prometheus
+        nodeGraph:
+          enabled: true
+        search:
+          hide: false
+        lokiSearch:
+          datasourceUid: loki
+      editable: true
+
+# Dashboards
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    # Loki dashboard
+    loki-dashboard:
+      gnetId: 13639
+      revision: 2
+      datasource: Loki
+
+    # Tempo dashboard
+    tempo-dashboard:
+      gnetId: 16795
+      revision: 3
+      datasource: Tempo
+
+    # Mimir dashboard
+    mimir-reads:
+      gnetId: 19125
+      revision: 1
+      datasource: Prometheus
+
+    mimir-writes:
+      gnetId: 19126
+      revision: 1
+      datasource: Prometheus
+
+    # Kubernetes monitoring
+    k8s-cluster:
+      gnetId: 7249
+      revision: 1
+      datasource: Prometheus
+
+# Plugins
+plugins:
+  - grafana-clock-panel
+  - grafana-piechart-panel
+  - grafana-simple-json-datasource
+
+# Grafana configuration
+grafana.ini:
+  server:
+    root_url: http://localhost:3000
+
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+
+  security:
+    allow_embedding: true
+
+  users:
+    default_theme: dark
+    auto_assign_org: true
+    auto_assign_org_role: Editor
+
+  auth.anonymous:
+    enabled: false
+
+  log:
+    mode: console
+    level: info
+
+  alerting:
+    enabled: false
+
+  unified_alerting:
+    enabled: true
+
+# RBAC
+rbac:
+  create: true
+  pspEnabled: false
+
+# Service account
+serviceAccount:
+  create: true
+  name: grafana
+
+# Image
+image:
+  repository: grafana/grafana
+  tag: "10.2.3"
+  pullPolicy: IfNotPresent
+
+# Environment variables
+env:
+  GF_EXPLORE_ENABLED: "true"
+  GF_UNIFIED_ALERTING_ENABLED: "true"
+
+# Enable trace propagation
+envFromSecret: ""
+
+# Service monitor (disabled for local dev)
+serviceMonitor:
+  enabled: false
+
+# Ingress (disabled - using NodePort)
+ingress:
+  enabled: false
+
+# Sidecar for dynamic dashboard loading
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    folder: /tmp/dashboards
+    defaultFolderName: General
+    searchNamespace: ALL
+
+  datasources:
+    enabled: false

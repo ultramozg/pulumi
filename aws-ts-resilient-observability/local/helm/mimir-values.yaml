@@ -1,0 +1,185 @@
+# Mimir configuration for local development
+# Using small-scale distributed mode
+
+global:
+  clusterDomain: cluster.local
+
+mimir:
+  structuredConfig:
+    multitenancy_enabled: false
+
+    blocks_storage:
+      backend: filesystem
+      filesystem:
+        dir: /data/mimir-blocks
+
+    alertmanager_storage:
+      backend: filesystem
+      filesystem:
+        dir: /data/mimir-alertmanager
+
+    ruler_storage:
+      backend: filesystem
+      filesystem:
+        dir: /data/mimir-ruler
+
+    limits:
+      # Retention
+      compactor_blocks_retention_period: 7d
+
+      # Query limits
+      max_query_lookback: 7d
+      max_query_length: 7d
+
+# Distributor
+distributor:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# Ingester
+ingester:
+  replicas: 1
+
+  persistentVolume:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+  zoneAwareReplication:
+    enabled: false
+
+# Querier
+querier:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# Query Frontend
+query_frontend:
+  replicas: 1
+
+  service:
+    type: NodePort
+    nodePort: 30900
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# Store Gateway
+store_gateway:
+  replicas: 1
+
+  persistentVolume:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  zoneAwareReplication:
+    enabled: false
+
+# Compactor
+compactor:
+  replicas: 1
+
+  persistentVolume:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Ruler
+ruler:
+  enabled: true
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# Alertmanager
+alertmanager:
+  enabled: true
+  replicas: 1
+
+  persistentVolume:
+    enabled: true
+    size: 1Gi
+    storageClass: standard
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  zoneAwareReplication:
+    enabled: false
+
+# Overrides Exporter
+overrides_exporter:
+  replicas: 0
+  enabled: false
+
+# MinIO (object storage - disabled since we use filesystem)
+minio:
+  enabled: false
+
+# Nginx (gateway)
+nginx:
+  enabled: false
+
+# Monitoring
+metaMonitoring:
+  serviceMonitor:
+    enabled: false
+
+  grafanaAgent:
+    enabled: false
+    installOperator: false

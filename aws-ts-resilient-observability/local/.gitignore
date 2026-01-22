@@ -1,0 +1,28 @@
+# Kind cluster artifacts
+*.log
+kubeconfig
+kubeconfig-*
+
+# Helm artifacts
+*.tgz
+charts/
+
+# Test artifacts
+test-results/
+*.xml
+*.json.bak
+
+# Local overrides
+*-local.yaml
+local-values.yaml
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

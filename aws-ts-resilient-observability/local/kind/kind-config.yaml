@@ -1,0 +1,54 @@
+# Kind Cluster Configuration - 3 Nodes
+#
+# 1 control plane + 2 worker nodes
+# Kubernetes v1.31.0 (stable version compatible with Kind v0.29.0)
+#
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: resilient-observability
+
+nodes:
+  # Control plane node
+  - role: control-plane
+    image: kindest/node:v1.31.0
+    extraPortMappings:
+    # Grafana
+    - containerPort: 30080
+      hostPort: 3000
+      protocol: TCP
+    # Loki
+    - containerPort: 30100
+      hostPort: 3100
+      protocol: TCP
+    # Tempo
+    - containerPort: 30200
+      hostPort: 3200
+      protocol: TCP
+    # Mimir
+    - containerPort: 30900
+      hostPort: 9009
+      protocol: TCP
+    # OTLP gRPC
+    - containerPort: 30317
+      hostPort: 4317
+      protocol: TCP
+    # OTLP HTTP
+    - containerPort: 30318
+      hostPort: 4318
+      protocol: TCP
+
+  # Worker node 1 - Observability workloads
+  - role: worker
+    image: kindest/node:v1.31.0
+    labels:
+      node.kubernetes.io/workload: observability
+
+  # Worker node 2 - Application workloads
+  - role: worker
+    image: kindest/node:v1.31.0
+    labels:
+      node.kubernetes.io/workload: application
+
+# Networking configuration
+networking:
+  podSubnet: "10.244.0.0/16"
