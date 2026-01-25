@@ -61,7 +61,7 @@ run: ## Deploy once with Skaffold
 clean: ## Delete Skaffold deployments
 	skaffold delete || true
 
-purge: clean delete ## Delete everything
+down: clean delete ## Delete everything
 
 dev-minimal: ## Minimal profile (Loki + Grafana)
 	skaffold dev -p minimal
@@ -88,7 +88,7 @@ grafana-url: ## Open Grafana
 deploy-sample: ## Deploy sample app
 	@kubectl apply -f manifests/sample-app.yaml
 
-setup: install create dev ## Full setup
+up: install create dev ## Full setup
 
 reset: delete create ## Reset cluster
 
