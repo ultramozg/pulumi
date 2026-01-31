@@ -1,0 +1,32 @@
+# Strimzi Kafka Operator Helm Values
+# Minimal configuration for local development
+
+# Operator configuration
+replicas: 1
+
+# Resource limits for the operator
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Watch all namespaces
+watchAnyNamespace: true
+
+# Feature gates (optional)
+featureGates: ""
+
+# Log level
+logLevel: INFO
+
+# Liveness and readiness probes
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 30

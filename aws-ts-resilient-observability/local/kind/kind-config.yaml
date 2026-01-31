@@ -36,6 +36,18 @@ nodes:
     - containerPort: 30318
       hostPort: 4318
       protocol: TCP
+    # Kafka external
+    - containerPort: 30092
+      hostPort: 9092
+      protocol: TCP
+    # App1 Producer API
+    - containerPort: 30800
+      hostPort: 8080
+      protocol: TCP
+    # App2 Consumer
+    - containerPort: 30801
+      hostPort: 8081
+      protocol: TCP
 
   # Worker node 1 - Observability workloads
   - role: worker
