@@ -54,6 +54,7 @@ deploy:
     - name: opentelemetry-collector
       repo: https://open-telemetry.github.io/opentelemetry-helm-charts
       remoteChart: opentelemetry-collector
+      version: 0.80.1
       namespace: opentelemetry
       createNamespace: true
       valuesFiles:
