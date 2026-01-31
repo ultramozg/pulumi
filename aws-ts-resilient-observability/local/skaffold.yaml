@@ -30,7 +30,8 @@ deploy:
     # Tempo - Distributed tracing
     - name: tempo
       repo: https://grafana.github.io/helm-charts
-      remoteChart: tempo-distributed
+      remoteChart: tempo
+      version: 1.18.1
       namespace: tempo
       createNamespace: true
       valuesFiles:
@@ -86,9 +87,9 @@ portForward:
     localPort: 3100
 
   - resourceType: service
-    resourceName: tempo-query-frontend
+    resourceName: tempo
     namespace: tempo
-    port: 3200
+    port: 3100
     localPort: 3200
 
   - resourceType: service
@@ -165,9 +166,9 @@ profiles:
         localPort: 3100
 
       - resourceType: service
-        resourceName: tempo-query-frontend
+        resourceName: tempo
         namespace: tempo
-        port: 3200
+        port: 3100
         localPort: 3200
 
       - resourceType: service

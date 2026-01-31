@@ -16,12 +16,22 @@ mimir:
     alertmanager_storage:
       backend: filesystem
       filesystem:
-        dir: /data/mimir-alertmanager
+        dir: /data/alertmanager-storage
 
     ruler_storage:
       backend: filesystem
       filesystem:
-        dir: /data/mimir-ruler
+        dir: /data/ruler-storage
+
+    # Set distinct data directories to avoid path overlap validation errors
+    alertmanager:
+      data_dir: /data/alertmanager-data
+
+    compactor:
+      data_dir: /data/compactor-data
+
+    ruler:
+      rule_path: /data/ruler-data
 
     limits:
       # Retention
@@ -29,7 +39,6 @@ mimir:
 
       # Query limits
       max_query_lookback: 7d
-      max_query_length: 7d
 
 # Distributor
 distributor:

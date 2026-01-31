@@ -179,7 +179,7 @@ config:
 
     # Tempo exporter for traces
     otlp/tempo:
-      endpoint: tempo-distributor.tempo.svc.cluster.local:4317
+      endpoint: tempo.tempo.svc.cluster.local:4317
       tls:
         insecure: true
 
@@ -211,9 +211,19 @@ serviceAccount:
   create: true
   name: otel-collector
 
-# RBAC
-rbac:
+# Cluster role for k8s attributes processor
+clusterRole:
   create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "namespaces"]
+      verbs: ["get", "watch", "list"]
+    - apiGroups: ["apps"]
+      resources: ["replicasets"]
+      verbs: ["get", "watch", "list"]
+    - apiGroups: ["extensions"]
+      resources: ["replicasets"]
+      verbs: ["get", "watch", "list"]
 
 # Pod annotations
 podAnnotations:
