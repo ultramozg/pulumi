@@ -1,10 +1,11 @@
 # Grafana configuration for local development
+# Chart version: 8.12.1, Grafana 11.6.0
 
 replicas: 1
 
 # Admin credentials
 adminUser: admin
-adminPassword: admin123
+adminPassword: admin
 
 # Disable secret leak validation for local development
 assertNoLeakedSecrets: false
@@ -27,49 +28,51 @@ persistence:
 resources:
   requests:
     cpu: 100m
-    memory: 128Mi
+    memory: 256Mi
   limits:
     cpu: 500m
-    memory: 256Mi
+    memory: 512Mi
 
 # Datasources
 datasources:
   datasources.yaml:
     apiVersion: 1
     datasources:
-    # Prometheus/Mimir datasource
-    - name: Prometheus
+    # Mimir datasource for metrics (Prometheus-compatible)
+    - name: Mimir
       type: prometheus
+      uid: mimir
       url: http://mimir-query-frontend.mimir.svc.cluster.local:8080/prometheus
       access: proxy
-      isDefault: true
+      isDefault: false
       jsonData:
         timeInterval: 30s
         queryTimeout: 60s
       editable: true
 
-    # Loki datasource
+    # Loki datasource for logs
     - name: Loki
       type: loki
+      uid: loki
       url: http://loki-gateway.loki.svc.cluster.local
       access: proxy
+      isDefault: true
       jsonData:
         maxLines: 1000
         httpHeaderName1: "X-Scope-OrgID"
         derivedFields:
-          # Trace ID field for correlation
           - datasourceUid: tempo
             matcherRegex: "traceid\":\"(\\w+)"
             name: TraceID
             url: "$${__value.raw}"
-            datasourceUid: tempo
       secureJsonData:
         httpHeaderValue1: "tenant1"
       editable: true
 
-    # Tempo datasource
+    # Tempo datasource for traces
     - name: Tempo
       type: tempo
+      uid: tempo
       url: http://tempo.tempo.svc.cluster.local:3100
       access: proxy
       jsonData:
@@ -79,18 +82,17 @@ datasources:
           spanEndTimeShift: '1h'
           filterByTraceID: true
           filterBySpanID: false
-          tags:
-            - key: service.name
-              value: service_name
+          customQuery: true
+          query: '{service_name="$${__span.tags["service.name"]}"} | json | trace_id="$${__span.traceId}"'
         tracesToMetrics:
-          datasourceUid: prometheus
+          datasourceUid: mimir
           spanStartTimeShift: '-1h'
           spanEndTimeShift: '1h'
           tags:
             - key: service.name
               value: service_name
         serviceMap:
-          datasourceUid: prometheus
+          datasourceUid: mimir
         nodeGraph:
           enabled: true
         search:
@@ -127,28 +129,10 @@ dashboards:
       revision: 3
       datasource: Tempo
 
-    # Mimir dashboard
-    mimir-reads:
-      gnetId: 19125
-      revision: 1
-      datasource: Prometheus
-
-    mimir-writes:
-      gnetId: 19126
-      revision: 1
-      datasource: Prometheus
-
-    # Kubernetes monitoring
-    k8s-cluster:
-      gnetId: 7249
-      revision: 1
-      datasource: Prometheus
-
 # Plugins
 plugins:
   - grafana-clock-panel
   - grafana-piechart-panel
-  - grafana-simple-json-datasource
 
 # Grafana configuration
 grafana.ini:
@@ -183,26 +167,16 @@ grafana.ini:
 # RBAC
 rbac:
   create: true
-  pspEnabled: false
 
 # Service account
 serviceAccount:
   create: true
   name: grafana
 
-# Image
-image:
-  repository: grafana/grafana
-  tag: "10.2.3"
-  pullPolicy: IfNotPresent
-
 # Environment variables
 env:
   GF_EXPLORE_ENABLED: "true"
   GF_UNIFIED_ALERTING_ENABLED: "true"
-
-# Enable trace propagation
-envFromSecret: ""
 
 # Service monitor (disabled for local dev)
 serviceMonitor:

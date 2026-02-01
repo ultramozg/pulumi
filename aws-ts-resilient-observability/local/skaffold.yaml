@@ -89,6 +89,7 @@ deploy:
     - name: grafana
       repo: https://grafana.github.io/helm-charts
       remoteChart: grafana
+      version: 8.12.1
       namespace: grafana
       createNamespace: true
       valuesFiles:
@@ -164,6 +165,7 @@ profiles:
         - name: grafana
           repo: https://grafana.github.io/helm-charts
           remoteChart: grafana
+          version: 8.12.1
           namespace: grafana
           createNamespace: true
           valuesFiles:
@@ -242,6 +244,7 @@ profiles:
         - name: grafana
           repo: https://grafana.github.io/helm-charts
           remoteChart: grafana
+          version: 8.12.1
           namespace: grafana
           createNamespace: true
           valuesFiles:

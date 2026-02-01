@@ -108,7 +108,7 @@ logs-kafka: ## Kafka logs
 	@kubectl logs -n kafka -l strimzi.io/name=kafka-cluster-kafka --tail=100 -f
 
 grafana-url: ## Open Grafana
-	@echo "http://localhost:3000 (admin/admin123)"
+	@echo "http://localhost:3000 (admin/admin)"
 	@open http://localhost:3000 2>/dev/null || true
 
 deploy-sample: ## Deploy sample app

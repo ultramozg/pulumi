@@ -10,7 +10,7 @@ make create   # Create Kind cluster
 make dev      # Start Skaffold
 ```
 
-Access: http://localhost:3000 (admin/admin123)
+Access: http://localhost:3000 (admin/admin)
 
 ## Stack
 
