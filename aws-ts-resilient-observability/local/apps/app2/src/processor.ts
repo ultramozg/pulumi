@@ -1,4 +1,5 @@
 import { trace, SpanKind, SpanStatusCode, context } from '@opentelemetry/api';
+import { log } from './logger';
 
 const tracer = trace.getTracer('app2-consumer');
 
@@ -77,7 +78,7 @@ async function processOrderCreated(event: OrderEvent): Promise<void> {
       inventorySpan.setAttribute('inventory.product', event.product);
 
       if (!inStock) {
-        console.log(`[ORDER] Product ${event.product} is out of stock`);
+        log.warn(`Product ${event.product} is out of stock`, { product: event.product, orderId: event.orderId });
       }
 
       inventorySpan.setStatus({ code: SpanStatusCode.OK });
@@ -95,7 +96,12 @@ async function processOrderCreated(event: OrderEvent): Promise<void> {
       saveSpan.end();
     });
 
-    console.log(`[ORDER] Processed order ${event.orderId} for ${event.quantity}x ${event.product}`);
+    log.info(`Processed order ${event.orderId} for ${event.quantity}x ${event.product}`, {
+      orderId: event.orderId,
+      product: event.product,
+      quantity: event.quantity,
+      eventType: 'ORDER_CREATED',
+    });
     span.setStatus({ code: SpanStatusCode.OK });
   } catch (error) {
     span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
@@ -158,7 +164,12 @@ async function processPayment(event: PaymentEvent): Promise<void> {
       saveSpan.end();
     });
 
-    console.log(`[PAYMENT] Processed payment ${event.paymentId} for order ${event.orderId}: $${event.amount.toFixed(2)}`);
+    log.info(`Processed payment ${event.paymentId} for order ${event.orderId}: $${event.amount.toFixed(2)}`, {
+      paymentId: event.paymentId,
+      orderId: event.orderId,
+      amount: event.amount,
+      eventType: 'PAYMENT_PROCESSED',
+    });
     span.setStatus({ code: SpanStatusCode.OK });
   } catch (error) {
     span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
@@ -201,7 +212,7 @@ async function processShipment(event: ShipmentEvent): Promise<void> {
       carrierSpan.setStatus({ code: SpanStatusCode.OK });
       carrierSpan.end();
 
-      console.log(`[SHIPMENT] Generated tracking number: ${trackingNumber}`);
+      log.info(`Generated tracking number: ${trackingNumber}`, { trackingNumber, carrier: event.carrier });
     });
 
     // Simulate database save
@@ -215,7 +226,12 @@ async function processShipment(event: ShipmentEvent): Promise<void> {
       saveSpan.end();
     });
 
-    console.log(`[SHIPMENT] Processed shipment ${event.shipmentId} to ${event.address}`);
+    log.info(`Processed shipment ${event.shipmentId} to ${event.address}`, {
+      shipmentId: event.shipmentId,
+      orderId: event.orderId,
+      address: event.address,
+      eventType: 'SHIPMENT_CREATED',
+    });
     span.setStatus({ code: SpanStatusCode.OK });
   } catch (error) {
     span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
@@ -232,7 +248,7 @@ export async function processEvent(key: string, value: string, headers: Record<s
   try {
     event = JSON.parse(value) as EventPayload;
   } catch (error) {
-    console.error('Failed to parse event:', error);
+    log.error(`Failed to parse event: ${(error as Error).message}`, { key });
     return;
   }
 
@@ -282,14 +298,14 @@ export async function processEvent(key: string, value: string, headers: Record<s
         await processShipment(event);
         break;
       default:
-        console.log(`[UNKNOWN] Unknown event type: ${(event as any).eventType}`);
+        log.warn(`Unknown event type: ${(event as any).eventType}`, { eventType: (event as any).eventType });
     }
 
     span.setStatus({ code: SpanStatusCode.OK });
   } catch (error) {
     span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
     span.recordException(error as Error);
-    console.error(`Failed to process event ${event.eventType}:`, error);
+    log.error(`Failed to process event ${event.eventType}: ${(error as Error).message}`, { eventType: event.eventType });
   } finally {
     span.end();
   }

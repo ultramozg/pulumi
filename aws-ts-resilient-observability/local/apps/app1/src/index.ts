@@ -6,6 +6,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { initKafkaProducer, sendMessage, disconnectProducer } from './kafka';
+import { log } from './logger';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,7 +20,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   if (span) {
     span.setAttribute('http.request_id', uuidv4());
   }
-  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+  log.info(`${req.method} ${req.path}`, { method: req.method, path: req.path });
   next();
 });
 
@@ -303,31 +304,23 @@ app.get('/api/demo/latency', async (req: Request, res: Response) => {
 
 async function start(): Promise<void> {
   try {
-    console.log('Waiting for Kafka to be ready...');
+    log.info('Waiting for Kafka to be ready...');
     await new Promise(resolve => setTimeout(resolve, 5000));
 
     await initKafkaProducer();
 
     app.listen(PORT, () => {
-      console.log(`App1 (Producer API) listening on port ${PORT}`);
-      console.log('Available endpoints:');
-      console.log('  POST /api/order      - Create an order');
-      console.log('  POST /api/payment    - Process a payment');
-      console.log('  POST /api/ship       - Initiate shipping');
-      console.log('  POST /api/demo/batch - Run batch demo');
-      console.log('  GET  /api/demo/error - Error simulation');
-      console.log('  GET  /api/demo/latency - Latency simulation');
-      console.log('  GET  /health         - Health check');
-      console.log('  GET  /ready          - Readiness check');
+      log.info(`App1 (Producer API) listening on port ${PORT}`, { port: Number(PORT) });
+      log.info('Available endpoints: POST /api/order, /api/payment, /api/ship, /api/demo/batch, GET /api/demo/error, /api/demo/latency, /health, /ready');
     });
 
     process.on('SIGTERM', async () => {
-      console.log('Shutting down...');
+      log.info('Shutting down...');
       await disconnectProducer();
       process.exit(0);
     });
   } catch (error) {
-    console.error('Failed to start application:', error);
+    log.error(`Failed to start application: ${(error as Error).message}`);
     process.exit(1);
   }
 }

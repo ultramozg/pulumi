@@ -1,5 +1,6 @@
 import { Kafka, Producer, Message } from 'kafkajs';
 import { context, trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { log } from './logger';
 
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'localhost:9092').split(',');
 const KAFKA_TOPIC = process.env.KAFKA_TOPIC || 'events';
@@ -19,15 +20,15 @@ export async function initKafkaProducer(): Promise<void> {
   producer = kafka.producer();
 
   producer.on('producer.connect', () => {
-    console.log('Kafka producer connected');
+    log.info('Kafka producer connected');
   });
 
   producer.on('producer.disconnect', () => {
-    console.log('Kafka producer disconnected');
+    log.warn('Kafka producer disconnected');
   });
 
   await producer.connect();
-  console.log(`Kafka producer initialized, brokers: ${KAFKA_BROKERS.join(', ')}`);
+  log.info(`Kafka producer initialized, brokers: ${KAFKA_BROKERS.join(', ')}`, { brokers: KAFKA_BROKERS.join(', ') });
 }
 
 export async function sendMessage(key: string, value: object): Promise<void> {
@@ -74,7 +75,7 @@ export async function sendMessage(key: string, value: object): Promise<void> {
         });
 
         span.setStatus({ code: SpanStatusCode.OK });
-        console.log(`Message sent to topic ${KAFKA_TOPIC}: ${key}`);
+        log.info(`Message sent to topic ${KAFKA_TOPIC}: ${key}`, { topic: KAFKA_TOPIC, key });
       } catch (error) {
         span.setStatus({
           code: SpanStatusCode.ERROR,

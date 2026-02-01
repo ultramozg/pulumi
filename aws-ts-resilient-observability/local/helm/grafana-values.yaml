@@ -55,12 +55,16 @@ datasources:
       access: proxy
       jsonData:
         maxLines: 1000
+        httpHeaderName1: "X-Scope-OrgID"
         derivedFields:
           # Trace ID field for correlation
           - datasourceUid: tempo
-            matcherRegex: "trace_id=(\\w+)"
+            matcherRegex: "traceid\":\"(\\w+)"
             name: TraceID
             url: "$${__value.raw}"
+            datasourceUid: tempo
+      secureJsonData:
+        httpHeaderValue1: "tenant1"
       editable: true
 
     # Tempo datasource
