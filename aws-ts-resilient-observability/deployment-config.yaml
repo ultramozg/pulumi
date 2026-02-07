@@ -361,6 +361,32 @@ stacks:
           otelCollectorReplicas: 2
         notes: Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack
 
+      - name: strimzi-kafka
+        type: strimzi-kafka
+        config:
+          region: us-east-1
+          primary: true
+          clusterName: workload-kafka
+          enableLoadBalancer: true
+          enableMetrics: true
+          topics:
+            - name: events
+              partitions: 3
+              replicas: 1
+              config:
+                retention.ms: "86400000"
+        notes: Deploys Strimzi Kafka operator and Kafka cluster (KRaft, single broker) with events topic
+
+      - name: kafka-mirror-maker
+        type: kafka-mirror-maker-2
+        config:
+          region: us-east-1
+          primary: true
+          localClusterAlias: primary
+          remoteClusterAlias: secondary
+          topicsPattern: events
+        notes: Deploys MirrorMaker 2 for unidirectional replication from secondary to primary
+
   # =============================================================================
   # WORKLOADS APPS - SECONDARY REGION (us-west-2)
   # =============================================================================
@@ -392,6 +418,32 @@ stacks:
           enableOTelAgent: true
           otelCollectorReplicas: 2
         notes: Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack
+
+      - name: strimzi-kafka
+        type: strimzi-kafka
+        config:
+          region: us-west-2
+          primary: false
+          clusterName: workload-kafka
+          enableLoadBalancer: true
+          enableMetrics: true
+          topics:
+            - name: events
+              partitions: 3
+              replicas: 1
+              config:
+                retention.ms: "86400000"
+        notes: Deploys Strimzi Kafka operator and Kafka cluster (KRaft, single broker) with events topic
+
+      - name: kafka-mirror-maker
+        type: kafka-mirror-maker-2
+        config:
+          region: us-west-2
+          primary: false
+          localClusterAlias: secondary
+          remoteClusterAlias: primary
+          topicsPattern: events
+        notes: Deploys MirrorMaker 2 for unidirectional replication from primary to secondary
 
 deploymentOptions:
   parallel: false

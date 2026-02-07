@@ -16,9 +16,9 @@
 
 **Purpose**: Directory structure and shared TypeScript types for both Kafka components
 
-- [ ] T001 Create directory structure: `components/kafka/strimzi/` and `components/kafka/mirror-maker/`
-- [ ] T002 [P] Create shared TypeScript interfaces in `components/kafka/types.ts` — `TopicSpec`, `StorageSpec`, `ResourceSpec`, `StrimziKafkaComponentArgs`, `StrimziKafkaOutputs`, `KafkaMirrorMaker2Args`, `KafkaMirrorMaker2Outputs` (per data-model.md)
-- [ ] T003 [P] Create metrics ConfigMap data constants in `components/kafka/metrics.ts` — Kafka JMX exporter rules and MM2 JMX exporter rules (per contracts section 6)
+- [x] T001 Create directory structure: `components/kafka/strimzi/` and `components/kafka/mirror-maker/`
+- [x] T002 [P] Create shared TypeScript interfaces in `components/kafka/types.ts` — `TopicSpec`, `StorageSpec`, `ResourceSpec`, `StrimziKafkaComponentArgs`, `StrimziKafkaOutputs`, `KafkaMirrorMaker2Args`, `KafkaMirrorMaker2Outputs` (per data-model.md)
+- [x] T003 [P] Create metrics ConfigMap data constants in `components/kafka/metrics.ts` — Kafka JMX exporter rules and MM2 JMX exporter rules (per contracts section 6)
 
 ---
 
@@ -28,8 +28,8 @@
 
 **CRITICAL**: Component registration in deployment-config.yaml MUST be complete before user story implementations can be validated
 
-- [ ] T004 Update `deployment-config.yaml` — add `strimzi-kafka` and `kafka-mirror-maker` component entries to both `workloads-apps-primary` and `workloads-apps-secondary` stacks (per data-model.md section "deployment-config.yaml Additions")
-- [ ] T005 Update `workloads/apps/index.ts` — add conditional instantiation of `StrimziKafkaComponent` and `KafkaMirrorMaker2Component` alongside the existing OTel Collector, reading config from `deployment-config.yaml` via the component config pattern
+- [x] T004 Update `deployment-config.yaml` — add `strimzi-kafka` and `kafka-mirror-maker` component entries to both `workloads-apps-primary` and `workloads-apps-secondary` stacks (per data-model.md section "deployment-config.yaml Additions")
+- [x] T005 Update `workloads/apps/index.ts` — add conditional instantiation of `StrimziKafkaComponent` and `KafkaMirrorMaker2Component` alongside the existing OTel Collector, reading config from `deployment-config.yaml` via the component config pattern
 
 **Checkpoint**: Deployment config and workload wiring ready — component implementations can now begin
 
@@ -45,7 +45,7 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T006 [US1] Create unit test file `tests/unit/strimzi-kafka.test.ts` with Pulumi `runtime.setMocks` pattern:
+- [x] T006 [US1] Create unit test file `tests/unit/strimzi-kafka.test.ts` with Pulumi `runtime.setMocks` pattern:
   - Test: Strimzi Helm Release is created with correct chart version (0.50.0) and repository
   - Test: KafkaNodePool CustomResource has roles `[controller, broker]` and 1 replica
   - Test: Kafka CustomResource has KRaft annotations, internal + loadbalancer listeners, metricsConfig reference
@@ -57,7 +57,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Implement `StrimziKafkaComponent` in `components/kafka/strimzi/index.ts`:
+- [x] T007 [US1] Implement `StrimziKafkaComponent` in `components/kafka/strimzi/index.ts`:
   - Extend `BaseAWSComponent` pattern (per `components/shared/base.ts`)
   - Create K8s namespaces (operator + kafka) if not existing
   - Deploy Strimzi operator via `k8s.helm.v3.Release` (chart v0.50.0 from strimzi.io/charts)
@@ -69,7 +69,7 @@
   - Conditionally configure `metricsConfig` on Kafka CRD
   - Export `StrimziKafkaOutputs`: clusterName, bootstrapServers, bootstrapNlbDnsName, bootstrapNlbHostedZoneId, namespace, metricsPort
 
-- [ ] T008 [US1] Verify unit tests pass: run `npx jest tests/unit/strimzi-kafka.test.ts`
+- [x] T008 [US1] Verify unit tests pass: run `npx jest tests/unit/strimzi-kafka.test.ts`
 
 **Checkpoint**: StrimziKafkaComponent fully implemented and tested — primary Kafka cluster deployable
 
@@ -83,14 +83,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T009 [US2] Add test cases to `tests/unit/strimzi-kafka.test.ts`:
+- [x] T009 [US2] Add test cases to `tests/unit/strimzi-kafka.test.ts`:
   - Test: Component accepts `region: "us-west-2"` and produces valid resources
   - Test: `primary: false` configuration is handled correctly (same component, different config)
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Verify `deployment-config.yaml` secondary stack entries match primary (same component type, swapped region); already added in T004 — validate correctness
-- [ ] T011 [US2] Verify `workloads/apps/index.ts` handles both primary and secondary stacks without code duplication — the same code path instantiates `StrimziKafkaComponent` with stack-specific config
+- [x] T010 [US2] Verify `deployment-config.yaml` secondary stack entries match primary (same component type, swapped region); already added in T004 — validate correctness
+- [x] T011 [US2] Verify `workloads/apps/index.ts` handles both primary and secondary stacks without code duplication — the same code path instantiates `StrimziKafkaComponent` with stack-specific config
 
 **Checkpoint**: Both regional Kafka clusters deployable via the same component — secondary config validated
 
