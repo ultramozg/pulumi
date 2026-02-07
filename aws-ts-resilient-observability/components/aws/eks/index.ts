@@ -377,7 +377,7 @@ export class EKSComponent extends BaseAWSComponent implements EKSComponentOutput
      * Required when the cluster uses API authentication mode.
      *
      * The adminRoleArn should be provided from the deployment configuration
-     * (e.g., from deployment-config.json via environment variables).
+     * (e.g., from deployment-config.yaml via environment variables).
      *
      * @param adminRoleArn - IAM role/user ARN to grant cluster admin access (required)
      */

@@ -474,16 +474,16 @@ Options:
 
 Examples:
   # Deploy from configuration file
-  automation deploy --config deployment-config.json --rollback-on-failure
-  
+  automation deploy --config deployment-config.yaml --rollback-on-failure
+
   # Deploy only shared services stacks
-  automation deploy --config deployment-config.json --stacks shared-services-primary
-  
+  automation deploy --config deployment-config.yaml --stacks shared-services-primary
+
   # Deploy both shared services stacks
-  automation deploy --config deployment-config.json --stacks shared-services-primary,shared-services-secondary
-  
+  automation deploy --config deployment-config.yaml --stacks shared-services-primary,shared-services-secondary
+
   # Preview changes with refresh
-  automation preview --config deployment-config.json --refresh
+  automation preview --config deployment-config.yaml --refresh
   
   # Deploy all components with default settings
   automation run-all --region us-west-2

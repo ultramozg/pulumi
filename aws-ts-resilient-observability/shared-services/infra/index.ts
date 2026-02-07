@@ -16,7 +16,7 @@ const awsConfig = new pulumi.Config("aws");
 const currentRegion = awsConfig.require("region");
 const isPrimary = config.get("isprimary") === "true";
 
-// All configuration comes from deployment-config.json via automation
+// All configuration comes from deployment-config.yaml via automation
 const transitGatewayAsn = config.requireNumber("asn");
 const eksClusterName = config.require("clusterName");
 
@@ -50,7 +50,7 @@ if (!isPrimary) {
 }
 
 if (isPrimary) {
-    // Get IPAM configuration from config - all values must be provided in deployment-config.json
+    // Get IPAM configuration from config - all values must be provided in deployment-config.yaml
     const ipamCidrBlocks = config.requireObject<string[]>("ipamCidrBlocks");
     const ipamOperatingRegions = config.requireObject<string[]>("ipamOperatingRegions");
     const ipamRegionalPoolNetmask = config.requireNumber("ipamRegionalPoolNetmask");
@@ -270,7 +270,7 @@ if (!isPrimary) {
 // DNS AND CERTIFICATE SETUP
 // ============================================================================
 
-// DNS configuration from deployment-config.json (set by automation)
+// DNS configuration from deployment-config.yaml (set by automation)
 const baseDomain = config.require("baseDomain");
 const parentDomain = config.require("parentDomain");
 const enableCertificates = config.requireBoolean("enableCertificates");

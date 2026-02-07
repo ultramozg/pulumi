@@ -1,0 +1,400 @@
+name: multi-region-resilient-observability
+description: Multi-region, multi-account deployment with shared services and workloads
+defaultRegion: us-east-1
+
+defaultTags:
+  Project: resilient-observability
+  Environment: production
+  ManagedBy: pulumi
+
+stacks:
+  # =============================================================================
+  # SHARED SERVICES - PRIMARY REGION (us-east-1)
+  # =============================================================================
+  shared-services-infra-primary:
+    workDir: ./shared-services/infra
+    stackName: primary
+    configFile: Pulumi.primary.yaml
+    description: Shared services infrastructure in primary region (us-east-1)
+    roleArn: ${SHARED_SERVICES_ROLE_ARN}
+    escEnvironments:
+      - namecheap-credentials
+    tags:
+      Region: us-east-1
+      AccountType: shared-services
+      IsPrimary: "true"
+    components:
+      - name: ipam
+        type: ipam
+        config:
+          region: us-east-1
+          primary: true
+          ipamCidrBlocks:
+            - 10.0.0.0/8
+          ipamOperatingRegions:
+            - us-east-1
+            - us-west-2
+          ipamRegionalPoolNetmask: 12
+          ipamVpcAllocationNetmask: 16
+
+      - name: tgw
+        type: transit-gateway
+        config:
+          region: us-east-1
+          primary: true
+          asn: 64512
+          enableRouteTableIsolation: true
+          routingGroups:
+            production:
+              description: Production workloads
+              allowedGroups: []
+              tags:
+                Environment: Production
+                Criticality: Critical
+        notes: >
+          To add more routing groups (dev, test, staging), add them to routingGroups.
+          Hub is automatic. Example: 'development': { 'allowedGroups': ['test'] }
+
+      - name: hub-vpc
+        type: hub-vpc
+        config:
+          region: us-east-1
+          primary: true
+        notes: CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask
+
+      - name: shared-eks
+        type: shared-eks
+        config:
+          region: us-east-1
+          primary: true
+          clusterName: shared-monitoring-cluster
+
+      - name: dns
+        type: dns
+        config:
+          region: us-east-1
+          primary: true
+          baseDomain: internal.srelog.dev
+          parentDomain: srelog.dev
+          enableCertificates: true
+          certificateValidationMethod: namecheap
+        notes: >
+          Creates private Route53 zone and ACM certificate.
+          Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'
+
+  # =============================================================================
+  # SHARED SERVICES - SECONDARY REGION (us-west-2)
+  # =============================================================================
+  shared-services-infra-secondary:
+    workDir: ./shared-services/infra
+    stackName: secondary
+    configFile: Pulumi.secondary.yaml
+    description: Shared services infrastructure in secondary region (us-west-2)
+    dependencies:
+      - shared-services-infra-primary
+    roleArn: ${SHARED_SERVICES_ROLE_ARN}
+    escEnvironments:
+      - namecheap-credentials
+    tags:
+      Region: us-west-2
+      AccountType: shared-services
+      IsPrimary: "false"
+    components:
+      - name: stack-config
+        type: stack-level
+        config:
+          primaryRegion: us-east-1
+        notes: Stack-level configuration for secondary region, including primaryRegion for cross-region references
+
+      - name: tgw
+        type: transit-gateway
+        config:
+          region: us-west-2
+          primary: false
+          asn: 64513
+          enableRouteTableIsolation: true
+          routingGroups:
+            production:
+              description: Production workloads
+              allowedGroups: []
+              tags:
+                Environment: Production
+                Criticality: Critical
+        notes: >
+          To add more routing groups (dev, test, staging), add them to routingGroups.
+          Hub is automatic. Example: 'development': { 'allowedGroups': ['test'] }
+
+      - name: hub-vpc
+        type: hub-vpc
+        config:
+          region: us-west-2
+          primary: false
+        notes: CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask
+
+      - name: shared-eks
+        type: shared-eks
+        config:
+          region: us-west-2
+          primary: false
+          clusterName: shared-monitoring-cluster-secondary
+
+      - name: dns
+        type: dns
+        config:
+          region: us-west-2
+          primary: false
+          baseDomain: internal.srelog.dev
+          parentDomain: srelog.dev
+          enableCertificates: true
+          certificateValidationMethod: namecheap
+        notes: >
+          Creates private Route53 zone and ACM certificate.
+          Requires Namecheap credentials in Pulumi ESC environment 'namecheap-credentials'
+
+  # =============================================================================
+  # SHARED SERVICES APPS - PRIMARY REGION (us-east-1)
+  # =============================================================================
+  shared-services-apps-primary:
+    workDir: ./shared-services/apps
+    stackName: primary
+    configFile: Pulumi.primary.yaml
+    description: Shared services applications in primary region (us-east-1)
+    dependencies:
+      - shared-services-infra-primary
+    roleArn: ${SHARED_SERVICES_ROLE_ARN}
+    escEnvironments:
+      - cloudflare-credentials
+    tags:
+      Region: us-east-1
+      AccountType: shared-services
+      IsPrimary: "true"
+    components:
+      - name: cloudflare-tunnel
+        type: cloudflare-tunnel
+        config:
+          region: us-east-1
+          primary: true
+          enableCloudflareTunnel: true
+          cloudflareTunnelReplicas: 2
+        notes: Deploys cloudflared to provide secure access via WARP. Requires cloudflareTunnelToken in Pulumi ESC
+
+      - name: observability
+        type: observability
+        config:
+          region: us-east-1
+          primary: true
+          enableObservability: true
+          loki:
+            enabled: true
+          tempo:
+            enabled: true
+          mimir:
+            enabled: true
+          grafana:
+            enabled: true
+          otelCollector:
+            enabled: true
+        notes: "Deploys full observability stack: Loki (logs), Tempo (traces), Mimir (metrics), Grafana, and OTel Collector"
+
+  # =============================================================================
+  # SHARED SERVICES APPS - SECONDARY REGION (us-west-2)
+  # =============================================================================
+  shared-services-apps-secondary:
+    workDir: ./shared-services/apps
+    stackName: secondary
+    configFile: Pulumi.secondary.yaml
+    description: Shared services applications in secondary region (us-west-2)
+    dependencies:
+      - shared-services-infra-secondary
+      - shared-services-apps-primary
+    roleArn: ${SHARED_SERVICES_ROLE_ARN}
+    escEnvironments:
+      - cloudflare-credentials
+    tags:
+      Region: us-west-2
+      AccountType: shared-services
+      IsPrimary: "false"
+    components:
+      - name: stack-config
+        type: stack-level
+        config:
+          primaryRegion: us-east-1
+        notes: Stack-level configuration for secondary region
+
+      - name: cloudflare-tunnel
+        type: cloudflare-tunnel
+        config:
+          region: us-west-2
+          primary: false
+          enableCloudflareTunnel: true
+          cloudflareTunnelReplicas: 2
+        notes: Deploys cloudflared to provide secure access via WARP. Uses same tunnel token as primary for multi-region redundancy
+
+      - name: observability
+        type: observability
+        config:
+          region: us-west-2
+          primary: false
+          enableObservability: true
+          loki:
+            enabled: true
+          tempo:
+            enabled: true
+          mimir:
+            enabled: true
+          grafana:
+            enabled: true
+          otelCollector:
+            enabled: true
+        notes: "Deploys full observability stack: Loki (logs), Tempo (traces), Mimir (metrics), Grafana, and OTel Collector"
+
+  # =============================================================================
+  # WORKLOADS - PRIMARY REGION (us-east-1)
+  # =============================================================================
+  workloads-infra-primary:
+    workDir: ./workloads/infra
+    stackName: primary
+    configFile: Pulumi.primary.yaml
+    description: Workloads infrastructure in primary region (us-east-1)
+    dependencies:
+      - shared-services-infra-primary
+    roleArn: ${WORKLOADS_ROLE_ARN}
+    tags:
+      Region: us-east-1
+      AccountType: workloads
+      IsPrimary: "true"
+    components:
+      - name: spoke-vpc
+        type: spoke-vpc
+        config:
+          region: us-east-1
+          primary: true
+          routingGroup: production
+        notes: CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask
+
+      - name: workload-eks
+        type: workload-eks
+        config:
+          region: us-east-1
+          primary: true
+          clusterName: workload-cluster
+
+      - name: rds-global
+        type: rds-global
+        config:
+          region: us-east-1
+          primary: true
+          globalClusterIdentifier: workload-global-db
+
+      - name: route53
+        type: route53
+        config:
+          hostedZone: workloads.example.com
+
+  # =============================================================================
+  # WORKLOADS - SECONDARY REGION (us-west-2)
+  # =============================================================================
+  workloads-infra-secondary:
+    workDir: ./workloads/infra
+    stackName: secondary
+    configFile: Pulumi.secondary.yaml
+    description: Workloads infrastructure in secondary region (us-west-2)
+    dependencies:
+      - shared-services-infra-secondary
+      - workloads-infra-primary
+    roleArn: ${WORKLOADS_ROLE_ARN}
+    tags:
+      Region: us-west-2
+      AccountType: workloads
+      IsPrimary: "false"
+    components:
+      - name: stack-config
+        type: stack-level
+        config:
+          primaryRegion: us-east-1
+        notes: Stack-level configuration for secondary region
+
+      - name: spoke-vpc
+        type: spoke-vpc
+        config:
+          region: us-west-2
+          primary: false
+          routingGroup: production
+        notes: CIDR automatically allocated from IPAM pool (10.0.0.0/8) with /16 netmask
+
+      - name: workload-eks
+        type: workload-eks
+        config:
+          region: us-west-2
+          primary: false
+          clusterName: workload-cluster-secondary
+
+      - name: rds-global
+        type: rds-global
+        config:
+          region: us-west-2
+          primary: false
+          globalClusterIdentifier: workload-global-db
+
+  # =============================================================================
+  # WORKLOADS APPS - PRIMARY REGION (us-east-1)
+  # =============================================================================
+  workloads-apps-primary:
+    workDir: ./workloads/apps
+    stackName: primary
+    configFile: Pulumi.primary.yaml
+    description: Workloads applications in primary region (us-east-1)
+    dependencies:
+      - workloads-infra-primary
+    roleArn: ${WORKLOADS_ROLE_ARN}
+    tags:
+      Region: us-east-1
+      AccountType: workloads
+      IsPrimary: "true"
+    components:
+      - name: observability-agent
+        type: observability-agent
+        config:
+          region: us-east-1
+          primary: true
+          enableOTelAgent: true
+          otelCollectorReplicas: 2
+        notes: Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack
+
+  # =============================================================================
+  # WORKLOADS APPS - SECONDARY REGION (us-west-2)
+  # =============================================================================
+  workloads-apps-secondary:
+    workDir: ./workloads/apps
+    stackName: secondary
+    configFile: Pulumi.secondary.yaml
+    description: Workloads applications in secondary region (us-west-2)
+    dependencies:
+      - workloads-infra-secondary
+      - workloads-apps-primary
+    roleArn: ${WORKLOADS_ROLE_ARN}
+    tags:
+      Region: us-west-2
+      AccountType: workloads
+      IsPrimary: "false"
+    components:
+      - name: stack-config
+        type: stack-level
+        config:
+          primaryRegion: us-east-1
+        notes: Stack-level configuration for secondary region
+
+      - name: observability-agent
+        type: observability-agent
+        config:
+          region: us-west-2
+          primary: false
+          enableOTelAgent: true
+          otelCollectorReplicas: 2
+        notes: Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack
+
+deploymentOptions:
+  parallel: false
+  continueOnFailure: false
+  rollbackOnFailure: true
+  refresh: true

@@ -1,6 +1,7 @@
 #!/usr/bin/env ts-node
 
 import { InfrastructureAutomation } from './index';
+import { ConfigManager } from './automation/config-manager';
 import * as path from 'path';
 
 /**
@@ -40,7 +41,7 @@ async function main() {
 
     try {
         // Deploy from configuration file
-        const configPath = path.join(__dirname, 'deployment-config.json');
+        const configPath = path.join(__dirname, 'deployment-config.yaml');
         
         console.log("📋 Loading deployment configuration...");
         const summary = await automation.deployFromConfig(configPath, {
@@ -118,13 +119,14 @@ switch (command) {
 
 async function destroyAll() {
     console.log("🗑️  Starting destruction of all stacks...");
-    
+
     const automation = new InfrastructureAutomation();
-    const configPath = path.join(__dirname, 'deployment-config.json');
-    
+    const configPath = path.join(__dirname, 'deployment-config.yaml');
+
     try {
+        const config = ConfigManager.loadConfig(configPath);
         const summary = await automation.destroyAll(
-            await import(configPath),
+            config,
             { parallel: false }
         );
         
@@ -141,13 +143,14 @@ async function destroyAll() {
 
 async function previewAll() {
     console.log("👀 Previewing all stack changes...");
-    
+
     const automation = new InfrastructureAutomation();
-    const configPath = path.join(__dirname, 'deployment-config.json');
-    
+    const configPath = path.join(__dirname, 'deployment-config.yaml');
+
     try {
+        const config = ConfigManager.loadConfig(configPath);
         const summary = await automation.previewAll(
-            await import(configPath),
+            config,
             { parallel: false, refresh: true }
         );
         
