@@ -122,7 +122,7 @@ const enableKafka = config.getBoolean("enableKafka") ?? false;
 let kafkaCluster: StrimziKafkaComponent | undefined;
 
 if (enableKafka) {
-    const kafkaClusterName = config.get("kafkaClusterName") ?? "workload-kafka";
+    const kafkaClusterName = config.get("clusterName") ?? "workload-kafka";
 
     kafkaCluster = new StrimziKafkaComponent(`${currentRegion}-strimzi-kafka`, {
         region: currentRegion,
@@ -138,8 +138,8 @@ if (enableKafka) {
                 config: { "retention.ms": "86400000" },
             },
         ],
-        enableMetrics: config.getBoolean("kafkaEnableMetrics") ?? true,
-        enableLoadBalancer: config.getBoolean("kafkaEnableLoadBalancer") ?? true,
+        enableMetrics: config.getBoolean("enableMetrics") ?? true,
+        enableLoadBalancer: config.getBoolean("enableLoadBalancer") ?? true,
     });
 
     console.log(`${currentRegion}: Strimzi Kafka cluster deployed`);
@@ -172,7 +172,7 @@ if (enableMirrorMaker && kafkaCluster) {
         remoteClusterAlias: remoteAlias,
         remoteBootstrapServers: pulumi.interpolate`${remoteBootstrap}:9094`,
         topicsPattern: "events",
-        enableMetrics: config.getBoolean("mm2EnableMetrics") ?? true,
+        enableMetrics: config.getBoolean("enableMetrics") ?? true,
     });
 
     console.log(`${currentRegion}: MirrorMaker 2 deployed (replicating from ${remoteAlias})`);

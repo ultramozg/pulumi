@@ -106,7 +106,7 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T012 [P] [US3] Create unit test file `tests/unit/kafka-mirror-maker.test.ts` with Pulumi `runtime.setMocks` pattern:
+- [x] T012 [P] [US3] Create unit test file `tests/unit/kafka-mirror-maker.test.ts` with Pulumi `runtime.setMocks` pattern:
   - Test: KafkaMirrorMaker2 CustomResource is created with correct connectCluster (local alias)
   - Test: Clusters array has local (internal:9092) and remote (NLB:9094) bootstrap servers
   - Test: Mirror config uses `IdentityReplicationPolicy` class name
@@ -115,14 +115,14 @@
   - Test: MM2 metrics ConfigMap is created when `enableMetrics: true`
   - Test: Component outputs include name, sourceCluster, targetCluster, replicatedTopics
 
-- [ ] T013 [P] [US3] Create integration test file `tests/integration/kafka-replication.test.ts`:
+- [x] T013 [P] [US3] Create integration test file `tests/integration/kafka-replication.test.ts`:
   - Test: StrimziKafkaComponent outputs (bootstrapNlbDnsName) can be referenced by KafkaMirrorMaker2Component inputs
   - Test: deployment-config.yaml correctly defines both strimzi-kafka and kafka-mirror-maker in both regional stacks
   - Test: Cross-stack dependency resolution works (MM2 depends on remote Kafka outputs)
 
 ### Implementation for User Story 3
 
-- [ ] T014 [US3] Implement `KafkaMirrorMaker2Component` in `components/kafka/mirror-maker/index.ts`:
+- [x] T014 [US3] Implement `KafkaMirrorMaker2Component` in `components/kafka/mirror-maker/index.ts`:
   - Extend `BaseAWSComponent` pattern
   - Create MM2 metrics ConfigMap (from `components/kafka/metrics.ts`)
   - Create KafkaMirrorMaker2 CustomResource (per contracts sections 4/5):
@@ -133,9 +133,9 @@
   - Conditionally configure `metricsConfig` on MM2 CRD
   - Export `KafkaMirrorMaker2Outputs`: name, sourceCluster, targetCluster, replicatedTopics
 
-- [ ] T015 [US3] Verify unit tests pass: run `npx jest tests/unit/kafka-mirror-maker.test.ts`
+- [x] T015 [US3] Verify unit tests pass: run `npx jest tests/unit/kafka-mirror-maker.test.ts`
 
-- [ ] T016 [US3] Verify integration tests pass: run `npx jest --config jest.integration.config.js tests/integration/kafka-replication.test.ts`
+- [x] T016 [US3] Verify integration tests pass: run `npx jest --config jest.integration.config.js tests/integration/kafka-replication.test.ts`
 
 **Checkpoint**: MirrorMaker 2 cross-region replication component fully implemented and tested
 
@@ -145,10 +145,10 @@
 
 **Purpose**: Final validation, Route 53 DNS config, and end-to-end verification
 
-- [ ] T017 [P] Add Route 53 latency-based DNS record configuration to `deployment-config.yaml` — `kafka-bootstrap` A record aliased to NLB per region (per data-model.md Route 53 section)
-- [ ] T018 [P] Verify all tests pass together: `npm test`
-- [ ] T019 Run quickstart.md validation steps (unit tests, integration tests, optional preview)
-- [ ] T020 Code review: verify all components follow `BaseAWSComponent` pattern, all CRDs match contracts, all config in deployment-config.yaml
+- [x] T017 [P] Add Route 53 latency-based DNS record configuration to `deployment-config.yaml` — `kafka-bootstrap` A record aliased to NLB per region (per data-model.md Route 53 section)
+- [x] T018 [P] Verify all tests pass together: `npm test`
+- [x] T019 Run quickstart.md validation steps (unit tests, integration tests, optional preview)
+- [x] T020 Code review: verify all components follow `BaseAWSComponent` pattern, all CRDs match contracts, all config in deployment-config.yaml
 
 ---
 

@@ -291,6 +291,21 @@ stacks:
         config:
           hostedZone: workloads.example.com
 
+      - name: kafka-bootstrap-dns
+        type: route53-record
+        config:
+          region: us-east-1
+          recordName: kafka-bootstrap
+          type: A
+          setIdentifier: us-east-1
+          latencyRoutingPolicy:
+            region: us-east-1
+          aliasTarget:
+            evaluateTargetHealth: true
+        notes: >
+          Route 53 latency-based A record for Kafka bootstrap.
+          aliasTarget.name is dynamically set from StrimziKafkaComponent NLB output.
+
   # =============================================================================
   # WORKLOADS - SECONDARY REGION (us-west-2)
   # =============================================================================
@@ -336,6 +351,21 @@ stacks:
           primary: false
           globalClusterIdentifier: workload-global-db
 
+      - name: kafka-bootstrap-dns
+        type: route53-record
+        config:
+          region: us-west-2
+          recordName: kafka-bootstrap
+          type: A
+          setIdentifier: us-west-2
+          latencyRoutingPolicy:
+            region: us-west-2
+          aliasTarget:
+            evaluateTargetHealth: true
+        notes: >
+          Route 53 latency-based A record for Kafka bootstrap (secondary region).
+          aliasTarget.name is dynamically set from StrimziKafkaComponent NLB output.
+
   # =============================================================================
   # WORKLOADS APPS - PRIMARY REGION (us-east-1)
   # =============================================================================
@@ -366,6 +396,7 @@ stacks:
         config:
           region: us-east-1
           primary: true
+          enableKafka: true
           clusterName: workload-kafka
           enableLoadBalancer: true
           enableMetrics: true
@@ -382,6 +413,7 @@ stacks:
         config:
           region: us-east-1
           primary: true
+          enableMirrorMaker: true
           localClusterAlias: primary
           remoteClusterAlias: secondary
           topicsPattern: events
@@ -424,6 +456,7 @@ stacks:
         config:
           region: us-west-2
           primary: false
+          enableKafka: true
           clusterName: workload-kafka
           enableLoadBalancer: true
           enableMetrics: true
@@ -440,6 +473,7 @@ stacks:
         config:
           region: us-west-2
           primary: false
+          enableMirrorMaker: true
           localClusterAlias: secondary
           remoteClusterAlias: primary
           topicsPattern: events
