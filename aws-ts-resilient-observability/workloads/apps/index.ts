@@ -1,6 +1,8 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import { OTelCollectorComponent } from "../../components/observability/opentelemetry-collector";
+import { StrimziKafkaComponent } from "../../components/kafka/strimzi";
+import { KafkaMirrorMaker2Component } from "../../components/kafka/mirror-maker";
 
 // Get configuration from deployment config (set by automation)
 const config = new pulumi.Config("workloads");
@@ -111,6 +113,71 @@ if (enableOTelAgent) {
     console.log(`${currentRegion}: OTel Collector agent disabled`);
 }
 
+// ============================================================================
+// KAFKA CLUSTER CONFIGURATION
+// ============================================================================
+
+// Strimzi Kafka cluster (optional)
+const enableKafka = config.getBoolean("enableKafka") ?? false;
+let kafkaCluster: StrimziKafkaComponent | undefined;
+
+if (enableKafka) {
+    const kafkaClusterName = config.get("clusterName") ?? "workload-kafka";
+
+    kafkaCluster = new StrimziKafkaComponent(`${currentRegion}-strimzi-kafka`, {
+        region: currentRegion,
+        clusterName: kafkaClusterName,
+        clusterEndpoint: eksClusterEndpoint,
+        clusterCertificateAuthority: eksClusterCertificateAuthority,
+        kubeconfig: eksKubeconfig,
+        topics: [
+            {
+                name: "events",
+                partitions: 3,
+                replicas: 1,
+                config: { "retention.ms": "86400000" },
+            },
+        ],
+        enableMetrics: config.getBoolean("enableMetrics") ?? true,
+        enableLoadBalancer: config.getBoolean("enableLoadBalancer") ?? true,
+    });
+
+    console.log(`${currentRegion}: Strimzi Kafka cluster deployed`);
+}
+
+// ============================================================================
+// KAFKA MIRRORMAKER 2 CONFIGURATION
+// ============================================================================
+
+// MirrorMaker 2 for cross-region replication (optional)
+const enableMirrorMaker = config.getBoolean("enableMirrorMaker") ?? false;
+let mirrorMaker: KafkaMirrorMaker2Component | undefined;
+
+if (enableMirrorMaker && kafkaCluster) {
+    const localAlias = isPrimary ? "primary" : "secondary";
+    const remoteAlias = isPrimary ? "secondary" : "primary";
+
+    // Get remote Kafka bootstrap from the other region's workloads-apps stack
+    const remoteStackName = isPrimary ? "secondary" : "primary";
+    const remoteWorkloadsStack = new pulumi.StackReference(`remote-workloads-apps-ref`, {
+        name: `${org}/workloads-apps/${remoteStackName}`,
+    });
+    const remoteBootstrap = remoteWorkloadsStack.requireOutput("kafkaBootstrapNlbDnsName") as pulumi.Output<string>;
+
+    mirrorMaker = new KafkaMirrorMaker2Component(`${currentRegion}-kafka-mirror-maker`, {
+        region: currentRegion,
+        kubeconfig: eksKubeconfig,
+        localClusterAlias: localAlias,
+        localBootstrapServers: `workload-kafka-kafka-bootstrap.kafka.svc:9092`,
+        remoteClusterAlias: remoteAlias,
+        remoteBootstrapServers: pulumi.interpolate`${remoteBootstrap}:9094`,
+        topicsPattern: "events",
+        enableMetrics: config.getBoolean("enableMetrics") ?? true,
+    });
+
+    console.log(`${currentRegion}: MirrorMaker 2 deployed (replicating from ${remoteAlias})`);
+}
+
 // Export important values
 export const region = currentRegion;
 export const isPrimaryRegion = isPrimary;
@@ -119,3 +186,14 @@ export const isPrimaryRegion = isPrimary;
 export const otelAgentEnabled = enableOTelAgent;
 export const otelAgentGrpcEndpoint = otelAgent?.otlpGrpcEndpoint;
 export const otelAgentHttpEndpoint = otelAgent?.otlpHttpEndpoint;
+
+// Export Kafka resources
+export const kafkaEnabled = enableKafka;
+export const kafkaClusterName = kafkaCluster?.clusterName;
+export const kafkaBootstrapServers = kafkaCluster?.bootstrapServers;
+export const kafkaBootstrapNlbDnsName = kafkaCluster?.bootstrapNlbDnsName;
+export const kafkaBootstrapNlbHostedZoneId = kafkaCluster?.bootstrapNlbHostedZoneId;
+
+// Export MirrorMaker 2 resources
+export const mirrorMakerEnabled = enableMirrorMaker;
+export const mirrorMakerName = mirrorMaker?.name;

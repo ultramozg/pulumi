@@ -291,6 +291,21 @@ stacks:
         config:
           hostedZone: workloads.example.com
 
+      - name: kafka-bootstrap-dns
+        type: route53-record
+        config:
+          region: us-east-1
+          recordName: kafka-bootstrap
+          type: A
+          setIdentifier: us-east-1
+          latencyRoutingPolicy:
+            region: us-east-1
+          aliasTarget:
+            evaluateTargetHealth: true
+        notes: >
+          Route 53 latency-based A record for Kafka bootstrap.
+          aliasTarget.name is dynamically set from StrimziKafkaComponent NLB output.
+
   # =============================================================================
   # WORKLOADS - SECONDARY REGION (us-west-2)
   # =============================================================================
@@ -336,6 +351,21 @@ stacks:
           primary: false
           globalClusterIdentifier: workload-global-db
 
+      - name: kafka-bootstrap-dns
+        type: route53-record
+        config:
+          region: us-west-2
+          recordName: kafka-bootstrap
+          type: A
+          setIdentifier: us-west-2
+          latencyRoutingPolicy:
+            region: us-west-2
+          aliasTarget:
+            evaluateTargetHealth: true
+        notes: >
+          Route 53 latency-based A record for Kafka bootstrap (secondary region).
+          aliasTarget.name is dynamically set from StrimziKafkaComponent NLB output.
+
   # =============================================================================
   # WORKLOADS APPS - PRIMARY REGION (us-east-1)
   # =============================================================================
@@ -360,6 +390,34 @@ stacks:
           enableOTelAgent: true
           otelCollectorReplicas: 2
         notes: Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack
+
+      - name: strimzi-kafka
+        type: strimzi-kafka
+        config:
+          region: us-east-1
+          primary: true
+          enableKafka: true
+          clusterName: workload-kafka
+          enableLoadBalancer: true
+          enableMetrics: true
+          topics:
+            - name: events
+              partitions: 3
+              replicas: 1
+              config:
+                retention.ms: "86400000"
+        notes: Deploys Strimzi Kafka operator and Kafka cluster (KRaft, single broker) with events topic
+
+      - name: kafka-mirror-maker
+        type: kafka-mirror-maker-2
+        config:
+          region: us-east-1
+          primary: true
+          enableMirrorMaker: true
+          localClusterAlias: primary
+          remoteClusterAlias: secondary
+          topicsPattern: events
+        notes: Deploys MirrorMaker 2 for unidirectional replication from secondary to primary
 
   # =============================================================================
   # WORKLOADS APPS - SECONDARY REGION (us-west-2)
@@ -392,6 +450,34 @@ stacks:
           enableOTelAgent: true
           otelCollectorReplicas: 2
         notes: Deploys OTel Collector agents in workload cluster to send telemetry to shared-services observability stack
+
+      - name: strimzi-kafka
+        type: strimzi-kafka
+        config:
+          region: us-west-2
+          primary: false
+          enableKafka: true
+          clusterName: workload-kafka
+          enableLoadBalancer: true
+          enableMetrics: true
+          topics:
+            - name: events
+              partitions: 3
+              replicas: 1
+              config:
+                retention.ms: "86400000"
+        notes: Deploys Strimzi Kafka operator and Kafka cluster (KRaft, single broker) with events topic
+
+      - name: kafka-mirror-maker
+        type: kafka-mirror-maker-2
+        config:
+          region: us-west-2
+          primary: false
+          enableMirrorMaker: true
+          localClusterAlias: secondary
+          remoteClusterAlias: primary
+          topicsPattern: events
+        notes: Deploys MirrorMaker 2 for unidirectional replication from primary to secondary
 
 deploymentOptions:
   parallel: false
